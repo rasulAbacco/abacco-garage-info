@@ -1,3 +1,5 @@
+// server/src/utils/cloudflare.js
+
 import {
   S3Client,
   PutObjectCommand,
@@ -20,9 +22,20 @@ const s3 = new S3Client({
   },
 });
 
+/**
+ * Generic Cloudflare R2 Upload
+ *
+ * OLD (still works):
+ * uploadToCloudflare(file, garageVisitId)
+ *
+ * NEW:
+ * uploadToCloudflare(file, "field-visits", visitId)
+ */
+
 export const uploadToCloudflare = async (
   file,
-  garageVisitId
+  folderOrRecordId,
+  recordId = null
 ) => {
   try {
 
@@ -33,34 +46,51 @@ export const uploadToCloudflare = async (
     const uniqueId =
       crypto.randomUUID();
 
-    const fileName = `garage-visits/${garageVisitId}/${uniqueId}${extension}`;
+    let folder = "garage-visits";
+    let id = folderOrRecordId;
 
-    const command = new PutObjectCommand({
-      Bucket:
-        process.env.R2_BUCKET_NAME,
+    // New format:
+    // uploadToCloudflare(file, "field-visits", visitId)
+    if (recordId !== null) {
+      folder = folderOrRecordId;
+      id = recordId;
+    }
 
-      Key: fileName,
+    const fileName =
+      `${folder}/${id}/${uniqueId}${extension}`;
 
-      Body: file.buffer,
+    const command =
+      new PutObjectCommand({
+        Bucket:
+          process.env.R2_BUCKET_NAME,
 
-      ContentType:
-        file.mimetype,
-    });
+        Key: fileName,
+
+        Body: file.buffer,
+
+        ContentType:
+          file.mimetype,
+      });
 
     await s3.send(command);
 
     return {
-      imageUrl: `${process.env.R2_PUBLIC_URL}/${fileName}`,
+      imageUrl:
+        `${process.env.R2_PUBLIC_URL}/${fileName}`,
 
       publicId: fileName,
     };
 
   } catch (error) {
 
-    console.log(error);
+    console.log(
+      "Cloudflare Upload Error:",
+      error
+    );
 
     throw new Error(
       "R2 upload failed"
     );
+
   }
 };

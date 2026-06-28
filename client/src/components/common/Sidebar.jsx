@@ -14,6 +14,13 @@ const Sidebar = ({ role, links = [] }) => {
 
   const isActive = (path) => location.pathname === path;
 
+  const roleTitle =
+    role === "FIELD_AGENT"
+      ? "Field Agent Console"
+      : role === "ADMIN"
+        ? "Admin Console"
+        : "Employee Console";
+
   return (
     <>
       {/* MOBILE TOP NAVBAR */}
@@ -35,7 +42,7 @@ const Sidebar = ({ role, links = [] }) => {
             <span className="text-[11px] font-bold text-white tracking-tighter">V</span>
           </div>
           <span className="text-xs font-bold uppercase tracking-wider text-neutral-900 whitespace-nowrap">
-            {role?.toLowerCase()} console
+            {roleTitle}
           </span>
         </div>
       </div>
@@ -43,9 +50,8 @@ const Sidebar = ({ role, links = [] }) => {
       {/* OVERLAY */}
       <div
         onClick={() => setIsOpen(false)}
-        className={`fixed inset-0 bg-black/40 backdrop-blur-xs lg:hidden transition-opacity duration-300 ease-in-out ${
-          isOpen ? "opacity-100 z-[55] pointer-events-auto" : "opacity-0 -z-10 pointer-events-none"
-        }`}
+        className={`fixed inset-0 bg-black/40 backdrop-blur-xs lg:hidden transition-opacity duration-300 ease-in-out ${isOpen ? "opacity-100 z-[55] pointer-events-auto" : "opacity-0 -z-10 pointer-events-none"
+          }`}
       />
 
       {/* SIDEBAR DRAWER */}
@@ -64,8 +70,8 @@ const Sidebar = ({ role, links = [] }) => {
               <span className="text-[9px] tracking-[0.3em] uppercase text-neutral-400 font-bold block mb-1">
                 — WORKSTATION —
               </span>
-              <h2 className="text-lg font-normal tracking-tight text-neutral-900 capitalize">
-                {role?.toLowerCase()} console
+              <h2 className="text-lg font-normal tracking-tight text-neutral-900">
+                {roleTitle}
               </h2>
             </div>
             <button
@@ -86,11 +92,10 @@ const Sidebar = ({ role, links = [] }) => {
                   <Link
                     to={item.path}
                     onClick={() => setIsOpen(false)}
-                    className={`block w-full px-5 py-3 text-xs uppercase tracking-widest transition-all duration-150 relative ${
-                      isActive(item.path)
-                        ? "bg-neutral-900 text-white font-medium"
-                        : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50"
-                    }`}
+                    className={`block w-full px-5 py-3 text-xs uppercase tracking-widest transition-all duration-150 relative ${isActive(item.path)
+                      ? "bg-neutral-900 text-white font-medium"
+                      : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50"
+                      }`}
                   >
                     {isActive(item.path) && (
                       <span className="absolute left-0 top-0 bottom-0 w-[4px] bg-neutral-900" />

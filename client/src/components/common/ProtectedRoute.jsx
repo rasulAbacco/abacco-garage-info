@@ -1,13 +1,28 @@
 import { Navigate } from "react-router-dom";
 
 const ProtectedRoute = ({ children }) => {
-  const user = JSON.parse(localStorage.getItem("user"));
+  const storedUser = localStorage.getItem("user");
 
-  if (!user) {
-    return <Navigate to="/" />;
+  if (!storedUser) {
+    return <Navigate to="/" replace />;
   }
 
-  return children;
+  try {
+    const user = JSON.parse(storedUser);
+
+    if (!user) {
+      localStorage.removeItem("user");
+      return <Navigate to="/" replace />;
+    }
+
+    return children;
+  } catch (error) {
+    console.error("Invalid user data in localStorage:", error);
+
+    localStorage.removeItem("user");
+
+    return <Navigate to="/" replace />;
+  }
 };
 
 export default ProtectedRoute;

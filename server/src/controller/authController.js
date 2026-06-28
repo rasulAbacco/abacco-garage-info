@@ -1,22 +1,24 @@
 import prisma from "../config/prisma.js";
 import bcrypt from "bcryptjs";
-
-
-// REGISTER USER
 export const registerUser = async (req, res) => {
   try {
-
-    const { name, email, password, role } = req.body;
+    const {
+      name,
+      email,
+      password,
+      role,
+      marketingType,
+    } = req.body;
 
     const existingUser = await prisma.user.findUnique({
       where: {
-        email
-      }
+        email,
+      },
     });
 
     if (existingUser) {
       return res.status(400).json({
-        message: "User already exists"
+        message: "User already exists",
       });
     }
 
@@ -27,42 +29,50 @@ export const registerUser = async (req, res) => {
         name,
         email,
         password: hashedPassword,
-        role
-      }
+        role,
+        marketingType,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        marketingType: true,
+        isActive: true,
+        createdAt: true,
+      },
     });
 
     res.status(201).json({
       message: "User created successfully",
-      user
+      user,
     });
-
   } catch (error) {
+    console.error("Register User Error:", error);
 
     res.status(500).json({
-      message: error.message
+      message: error.message,
     });
-
   }
 };
-
 
 // LOGIN USER
 export const loginUser = async (req, res) => {
   try {
-
     const { email, password } = req.body;
 
     const user = await prisma.user.findUnique({
       where: {
-        email
-      }
+        email,
+      },
     });
 
     if (!user) {
       return res.status(404).json({
-        message: "User not found"
+        message: "User not found",
       });
     }
+
     if (!user.isActive) {
       return res.status(403).json({
         message: "Account disabled by admin",
@@ -76,56 +86,53 @@ export const loginUser = async (req, res) => {
 
     if (!isPasswordMatch) {
       return res.status(400).json({
-        message: "Invalid credentials"
+        message: "Invalid credentials",
       });
     }
 
+    const { password: _, ...userData } = user;
+
     res.status(200).json({
       message: "Login successful",
-      user
+      user: userData,
     });
-
   } catch (error) {
+    console.error("Login Error:", error);
 
     res.status(500).json({
-      message: error.message
+      message: error.message,
     });
-
   }
 };
 
 // GET EMPLOYEES
-export const getEmployees =
-  async (req, res) => {
-    try {
+export const getEmployees = async (req, res) => {
+  try {
+    const employees = await prisma.user.findMany({
+      orderBy: {
+        createdAt: "desc",
+      },
 
-      const employees =
-        await prisma.user.findMany({
-          orderBy: {
-            createdAt: "desc",
-          },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        marketingType: true,
+        isActive: true,
+        createdAt: true,
+      },
+    });
 
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            role: true,
-            isActive: true,
-          },
-        });
+    res.status(200).json(employees);
+  } catch (error) {
+    console.error("Get Employees Error:", error);
 
-      res.status(200).json(
-        employees
-      );
-
-    } catch (error) {
-
-      res.status(500).json({
-        message: error.message,
-      });
-    }
-  };
-
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
 
 // TOGGLE USER STATUS
 export const toggleEmployeeStatus = async (
