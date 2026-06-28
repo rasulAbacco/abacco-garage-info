@@ -14,14 +14,16 @@ model User {
   email    String @unique
   password String
 
-  role     Role    @default(EMPLOYEE)
-  isActive Boolean @default(true)
+  role          Role    @default(EMPLOYEE)
+  isActive      Boolean @default(true)
+  marketingType String? @default("GARAGE")
 
   garageVisits GarageVisit[]
   attendance   EmployeeAttendance[]
   locations    EmployeeLocation[]
   schools      School[]
   vehicles     Vehicle[]
+  fieldVisits  FieldVisit[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -69,6 +71,7 @@ model GarageImage {
 enum Role {
   ADMIN
   EMPLOYEE
+  FIELD_AGENT
 }
 
 enum LeadStatus {
@@ -248,6 +251,71 @@ model VehicleLocation {
   @@index([vehicleId])
   @@index([regNo])
   @@index([createdAt])
+}
+
+model FieldVisit {
+  id            String  @id @default(cuid())
+  title         String // Mapped from businessName
+  address       String?
+  city          String?
+  district      String?
+  state         String?
+  latitude      Float?
+  longitude     Float?
+  marketingType String  @default("GENERAL")
+
+  // Dynamic JSON Struct Arrays
+  contacts           Json @default("[]") // [{name, designation, phoneNumber, isPrimary}]
+  emails             Json @default("[]") // Array of string email endpoints
+  interestedProducts Json @default("[]") // Array of string product tags
+
+  // Business CRM Pipeline Triage Parameters
+  businessCategory  String           @default("Car Garage")
+  source            String           @default("Cold Visit")
+  priority          String           @default("Medium")
+  status            FieldVisitStatus @default(PENDING)
+  nextFollowUpMode  String           @default("Call")
+  meetingResult     String           @default("Discussed")
+  leadValue         Float? // Financial lead sizing matrix (₹ Size)
+  followUpDate      DateTime?
+  discussionSummary String?          @db.Text // High-volume note description logs
+
+  // Referral Network Channels
+  referredByName  String?
+  referredByPhone String?
+
+  // System Audit Parameters & Linked File Payloads
+  employeeId String
+  employee   User              @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  images     FieldVisitImage[]
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@index([employeeId])
+  @@index([marketingType])
+  @@index([status])
+  @@index([followUpDate])
+}
+
+model FieldVisitImage {
+  id        String     @id @default(cuid())
+  imageUrl  String
+  publicId  String?
+  imageType String     @default("FIELD_PHOTO") // "FIELD_PHOTO", "KYC_FRONT", "KYC_BACK", "GST", "QUOTATION", "BROCHURE"
+  visitId   String
+  visit     FieldVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now())
+
+  @@index([visitId])
+}
+
+enum FieldVisitStatus {
+  PENDING
+  FOLLOW_UP
+  INTERESTED
+  CUSTOMER
+  CLOSED
+  NOT_INTERESTED
 }
 
 enum VehicleStatus {

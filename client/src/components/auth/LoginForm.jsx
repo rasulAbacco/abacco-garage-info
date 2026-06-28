@@ -17,8 +17,18 @@ const LoginForm = () => {
     setErrorMsg("");
     try {
       const data = await loginUser(formData);
+
       localStorage.setItem("user", JSON.stringify(data.user));
-      navigate(data.user.role === "ADMIN" ? "/admin-dashboard" : "/employee-dashboard");
+
+      if (data.user.role === "ADMIN") {
+        navigate("/admin-dashboard");
+      } else if (data.user.role === "EMPLOYEE") {
+        navigate("/employee-dashboard");
+      } else if (data.user.role === "FIELD_AGENT") {
+        navigate("/field-agent-dashboard");
+      } else {
+        navigate("/");
+      }
     } catch (error) {
       setErrorMsg(error.response?.data?.message || "Invalid workstation credentials.");
     } finally { setIsLoading(false); }
@@ -26,17 +36,17 @@ const LoginForm = () => {
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-[#1A1A1A] flex items-center justify-center p-4 font-serif antialiased relative overflow-hidden">
-      
+
       {/* 1. Structural Blueprint Grid */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#E2E8F0_1px,transparent_1px),linear-gradient(to_bottom,#E2E8F0_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-[0.25] pointer-events-none" />
-      
+
       {/* 2. Soft Monochrome Depth Vials */}
       <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-slate-300/10 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[600px] h-[600px] bg-slate-200/30 rounded-full blur-[130px] pointer-events-none" />
 
       {/* Main Authentication Terminal Card */}
       <div className="w-full max-w-sm bg-white p-10 rounded-none border border-[#D9D9D9] shadow-[0_24px_60px_rgba(15,23,42,0.02)] relative z-10">
-        
+
         {/* Terminal Header */}
         <div className="text-center mb-10">
           <h2 className="text-2xl font-normal tracking-tight text-neutral-900">System Sign In</h2>
@@ -80,7 +90,7 @@ const LoginForm = () => {
                 onChange={handleChange}
                 className="w-full bg-transparent py-2.5 pr-10 text-sm outline-none placeholder-neutral-300"
               />
-              
+
               {/* Minimalist View Toggle Action Button */}
               <button
                 type="button"
@@ -113,7 +123,7 @@ const LoginForm = () => {
             {isLoading ? "Verifying..." : "Access Console"}
           </button>
         </form>
-        
+
       </div>
     </div>
   );

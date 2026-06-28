@@ -1,63 +1,60 @@
-import {
-  useEffect,
-  useState,
-} from "react";
+import { useEffect, useState } from "react";
 
 import API from "../../api/axios";
 
 const EmployeeList = () => {
-
-  const [employees, setEmployees] =
-    useState([]);
-
-  const [loading, setLoading] =
-    useState(true);
+  const [employees, setEmployees] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const fetchEmployees = async () => {
     try {
-
-      const response =
-        await API.get(
-          "/api/auth/employees"
-        );
-
+      const response = await API.get("/api/auth/employees");
       setEmployees(response.data);
-
     } catch (error) {
-
       console.log(error);
-
     } finally {
-
       setLoading(false);
     }
   };
 
-  const toggleStatus = async (
-    id
-  ) => {
+  const toggleStatus = async (id) => {
     try {
-
-      await API.put(
-        `/api/auth/toggle/${id}`
-      );
+      await API.put(`/api/auth/toggle/${id}`);
 
       setEmployees((prev) =>
         prev.map((emp) =>
           emp.id === id
             ? {
                 ...emp,
-                isActive:
-                  !emp.isActive,
+                isActive: !emp.isActive,
               }
             : emp
         )
       );
-
     } catch (error) {
-
       console.log(error);
     }
+  };
+
+  const formatRole = (role) => {
+    switch (role) {
+      case "FIELD_AGENT":
+        return "FIELD AGENT";
+      case "ADMIN":
+        return "ADMIN";
+      case "EMPLOYEE":
+        return "EMPLOYEE";
+      default:
+        return role;
+    }
+  };
+
+  const formatMarketingType = (type) => {
+    if (!type) return "-";
+
+    return type
+      .replaceAll("_", " ")
+      .toUpperCase();
   };
 
   useEffect(() => {
@@ -66,31 +63,21 @@ const EmployeeList = () => {
 
   return (
     <div className="mt-10 bg-white border border-neutral-200 overflow-hidden">
-
       <div className="p-5 border-b border-neutral-200">
-
         <h2 className="text-xl font-semibold text-neutral-900">
           Employee List
         </h2>
-
       </div>
 
       {loading ? (
-
         <div className="p-10 text-center text-neutral-400">
           Loading employees...
         </div>
-
       ) : (
-
         <div className="overflow-x-auto">
-
-          <table className="w-full min-w-[700px]">
-
+          <table className="w-full min-w-[900px]">
             <thead className="bg-neutral-50 border-b border-neutral-200">
-
               <tr>
-
                 <th className="text-left px-5 py-4 text-xs uppercase tracking-wider text-neutral-500">
                   Name
                 </th>
@@ -104,26 +91,25 @@ const EmployeeList = () => {
                 </th>
 
                 <th className="text-left px-5 py-4 text-xs uppercase tracking-wider text-neutral-500">
+                  Marketing Type
+                </th>
+
+                <th className="text-left px-5 py-4 text-xs uppercase tracking-wider text-neutral-500">
                   Status
                 </th>
 
                 <th className="text-left px-5 py-4 text-xs uppercase tracking-wider text-neutral-500">
                   Action
                 </th>
-
               </tr>
-
             </thead>
 
             <tbody>
-
               {employees.map((emp) => (
-
                 <tr
                   key={emp.id}
                   className="border-b border-neutral-100"
                 >
-
                   <td className="px-5 py-4 text-sm text-neutral-800">
                     {emp.name}
                   </td>
@@ -132,12 +118,17 @@ const EmployeeList = () => {
                     {emp.email}
                   </td>
 
+                  <td className="px-5 py-4 text-sm font-medium text-neutral-700">
+                    {formatRole(emp.role)}
+                  </td>
+
                   <td className="px-5 py-4 text-sm text-neutral-600">
-                    {emp.role}
+                    {emp.role === "FIELD_AGENT"
+                      ? formatMarketingType(emp.marketingType)
+                      : "-"}
                   </td>
 
                   <td className="px-5 py-4">
-
                     <span
                       className={`text-xs px-3 py-1 rounded-full ${
                         emp.isActive
@@ -149,16 +140,12 @@ const EmployeeList = () => {
                         ? "ACTIVE"
                         : "DISABLED"}
                     </span>
-
                   </td>
 
                   <td className="px-5 py-4">
-
                     <button
                       onClick={() =>
-                        toggleStatus(
-                          emp.id
-                        )
+                        toggleStatus(emp.id)
                       }
                       className={`relative w-14 h-7 rounded-full transition-all duration-300 ${
                         emp.isActive
@@ -166,7 +153,6 @@ const EmployeeList = () => {
                           : "bg-neutral-300"
                       }`}
                     >
-
                       <span
                         className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-all duration-300 ${
                           emp.isActive
@@ -174,23 +160,14 @@ const EmployeeList = () => {
                             : "left-1"
                         }`}
                       />
-
                     </button>
-
                   </td>
-
                 </tr>
-
               ))}
-
             </tbody>
-
           </table>
-
         </div>
-
       )}
-
     </div>
   );
 };

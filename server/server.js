@@ -10,6 +10,7 @@ import locationRoutes from "./src/routes/locationRoutes.js";
 import schoolRoutes from "./src/routes/schoolRoutes.js";
 import vehicleroutes from "./src/routes/vehicleroutes.js";
 import { startVehicleTrackingCron } from "./src/services/vehicleTracking.cron.js";
+import fieldVisitRoutes from "./src/routes/fieldVisitRoutes.js";
 
 dotenv.config();
 
@@ -89,6 +90,7 @@ app.use(
   "/api/location",
   locationRoutes
 );
+app.use("/api/field-visit", fieldVisitRoutes);
 app.use("/api/school", schoolRoutes);
 app.use("/api/vehicles", vehicleroutes);
 
