@@ -38,6 +38,7 @@ const FieldAgentAddVisit = () => {
     const [nextFollowUpMode, setNextFollowUpMode] = useState("Call");
     const [meetingResult, setMeetingResult] = useState("Discussed");
     const [leadValue, setLeadValue] = useState("");
+    const [visitedDate, setVisitedDate] = useState(new Date().toISOString().split("T")[0]);
     const [followUpDate, setFollowUpDate] = useState("");
     const [discussionSummary, setDiscussionSummary] = useState("");
 
@@ -184,6 +185,7 @@ const FieldAgentAddVisit = () => {
         if (validContacts.length === 0) return alert("At least one contact profile record is required.");
         if (!contacts.some(c => c.isPrimary)) return alert("One explicitly assigned primary contact target configuration is mandatory.");
         if (businessCategory === "Others" && !customCategory.trim()) return alert("Please specify the custom Business Category.");
+        if (!visitedDate) return alert("Visited Date is a required pipeline marker.");
 
         try {
             setIsSubmitting(true);
@@ -208,6 +210,7 @@ const FieldAgentAddVisit = () => {
             formData.append("nextFollowUpMode", nextFollowUpMode);
             formData.append("meetingResult", meetingResult);
             formData.append("leadValue", leadValue);
+            formData.append("visitedDate", visitedDate);
             formData.append("followUpDate", followUpDate);
             formData.append("discussionSummary", discussionSummary.trim());
 
@@ -724,13 +727,13 @@ const FieldAgentAddVisit = () => {
 
                                 {businessCategory === "Others" && (
                                     <div>
-                                        <label className="block text-xs font-bold text-indigo-600 uppercase tracking-wider mb-1.5">Specify Business Category <span className="text-rose-500">*</span></label>
+                                        <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Specify Business Category <span className="text-rose-500">*</span></label>
                                         <input
                                             type="text"
                                             value={customCategory}
                                             onChange={(e) => setCustomCategory(e.target.value)}
                                             placeholder="Enter custom business environment type"
-                                            className="w-full border border-indigo-200 focus:border-indigo-500 rounded-lg px-4 py-2.5 text-sm outline-none bg-indigo-50/20 text-slate-900"
+                                            className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-slate-900 bg-white text-slate-900"
                                         />
                                     </div>
                                 )}
@@ -796,6 +799,19 @@ const FieldAgentAddVisit = () => {
                                     </div>
                                 </div>
 
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                                        <Calendar className="w-3.5 h-3.5 text-slate-400" /> Visited Date <span className="text-rose-500">*</span>
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={visitedDate}
+                                        onChange={(e) => setVisitedDate(e.target.value)}
+                                        required
+                                        className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-slate-900 bg-white text-slate-900"
+                                    />
+                                </div>
+
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
                                         <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Follow-up Vector</label>
@@ -813,33 +829,16 @@ const FieldAgentAddVisit = () => {
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Execution Result</label>
-                                        <select
-                                            value={meetingResult}
-                                            onChange={(e) => setMeetingResult(e.target.value)}
-                                            className="w-full border border-slate-300 rounded-lg px-2 py-2.5 text-sm outline-none focus:border-slate-900 bg-white text-slate-900"
-                                        >
-                                            <option value="Not Available">Unavailable</option>
-                                            <option value="Discussed">Discussed</option>
-                                            <option value="Interested">Interested</option>
-                                            <option value="Need Demo">Requires Demo</option>
-                                            <option value="Need Quotation">Wants Quote</option>
-                                            <option value="Closed">Deal Won</option>
-                                            <option value="Rejected">Declined</option>
-                                        </select>
+                                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                                            <Calendar className="w-3.5 h-3.5 text-slate-400" /> Follow Up Date
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={followUpDate}
+                                            onChange={(e) => setFollowUpDate(e.target.value)}
+                                            className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-slate-900 bg-white text-slate-900"
+                                        />
                                     </div>
-                                </div>
-
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                                        <Calendar className="w-3.5 h-3.5 text-slate-400" /> Next Follow Up Matrix Date
-                                    </label>
-                                    <input
-                                        type="date"
-                                        value={followUpDate}
-                                        onChange={(e) => setFollowUpDate(e.target.value)}
-                                        className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-slate-900 bg-white text-slate-900"
-                                    />
                                 </div>
 
                                 <div>
