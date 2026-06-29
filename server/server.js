@@ -11,6 +11,7 @@ import schoolRoutes from "./src/routes/schoolRoutes.js";
 import vehicleroutes from "./src/routes/vehicleroutes.js";
 import { startVehicleTrackingCron } from "./src/services/vehicleTracking.cron.js";
 import fieldVisitRoutes from "./src/routes/fieldVisitRoutes.js";
+import { reverseGeocode } from "./src/controller/geolocationController.js";
 
 dotenv.config();
 
@@ -60,7 +61,7 @@ app.use(
       return callback(
         new Error(
           "CORS not allowed: " +
-            origin
+          origin
         )
       );
     },
@@ -85,7 +86,7 @@ app.use(
   employeeDashboardRoutes
 );
 app.use("/api/garage", garageRoutes);
-app.use( "/api/attendance", attendanceRoutes);
+app.use("/api/attendance", attendanceRoutes);
 app.use(
   "/api/location",
   locationRoutes
@@ -93,6 +94,7 @@ app.use(
 app.use("/api/field-visit", fieldVisitRoutes);
 app.use("/api/school", schoolRoutes);
 app.use("/api/vehicles", vehicleroutes);
+app.use("/api/geolocation", reverseGeocode);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
