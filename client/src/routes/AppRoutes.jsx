@@ -32,12 +32,13 @@ import SchoolDetails from "../pages/shared/SchoolDetails";
 // FIELD AGENT
 import FieldAgentDashboard from "../pages/field-agent/FieldAgentDashboard";
 import FieldAgentAttendance from "../pages/field-agent/FieldAgentAttendance";
-import  FieldAgentMyVisits from "../pages/field-agent/FieldAgentMyVisits";
+import FieldAgentMyVisits from "../pages/field-agent/FieldAgentMyVisits";
 import FieldAgentFollowUps from "../pages/field-agent/FieldAgentFollowUps";
 import FieldAgentReports from "../pages/field-agent/FieldAgentReports";
 import FieldAgentProfile from "../pages/field-agent/FieldAgentProfile";
 import FieldAgentAddVisit from "../pages/field-agent/FieldAgentAddVisit";
-
+import FieldAgentVisitDetails from "../pages/field-agent/FieldAgentVisitDetails";
+import FieldAgentEditVisit from "../pages/field-agent/FieldAgentEditVisit";
 import ProtectedRoute from "../components/common/ProtectedRoute";
 
 const AppRoutes = () => {
@@ -190,6 +191,16 @@ const AppRoutes = () => {
         <Route
           path="profile"
           element={<FieldAgentProfile />}
+        />
+
+        <Route
+          path="visit/:id"
+          element={<FieldAgentVisitDetails />}
+        />
+
+        <Route
+          path="edit-visit/:id"
+          element={<FieldAgentEditVisit />}
         />
       </Route>
 

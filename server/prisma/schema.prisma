@@ -279,7 +279,7 @@ model FieldVisit {
   leadValue         Float? // Financial lead sizing matrix (₹ Size)
   followUpDate      DateTime?
   discussionSummary String?          @db.Text // High-volume note description logs
-
+  visitedDate        DateTime?
   // Referral Network Channels
   referredByName  String?
   referredByPhone String?

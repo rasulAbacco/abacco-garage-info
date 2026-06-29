@@ -6,7 +6,9 @@ import { uploadToCloudflare } from "../utils/cloudflare.js";
 ========================================================== */
 
 // Document-type keys accepted via multipart upload, mapped to the
-// imageType value stored against FieldVisitImage.
+// imageType value stored against FieldVisitImage, and to the flat
+// response field the UI reads the saved URL back from
+// (visit.businessCardFront, visit.gstCertificate, etc.)
 const DOCUMENT_TYPE_MAP = {
     businessCardFront: "BUSINESS_CARD_FRONT",
     businessCardBack: "BUSINESS_CARD_BACK",
@@ -14,6 +16,11 @@ const DOCUMENT_TYPE_MAP = {
     quotationDoc: "QUOTATION",
     brochureDoc: "BROCHURE",
 };
+
+// Reverse lookup: imageType -> UI document key
+const IMAGE_TYPE_TO_DOC_KEY = Object.fromEntries(
+    Object.entries(DOCUMENT_TYPE_MAP).map(([key, type]) => [type, key])
+);
 
 /**
  * Safely parse a value that may already be an array/object (when sent as
@@ -49,23 +56,67 @@ const parseNullableDate = (value) => {
     return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+const VISIT_INCLUDE = {
+    images: {
+        orderBy: { createdAt: "desc" },
+    },
+    employee: {
+        select: { id: true, name: true, email: true, marketingType: true },
+    },
+};
+
 /**
- * The UI cards/lists/dashboard widgets render a flat `contactPerson`,
- * `phoneNumber`, `email`, and `notes` shape on each visit object, while the
- * schema stores these inside the `contacts` / `emails` JSON arrays and the
- * `discussionSummary` text field. This helper derives those flat,
- * UI-friendly fields from a raw Prisma FieldVisit record without losing the
- * underlying structured data (still included for any consumer that needs
- * the full detail).
+ * The UI's list/detail/edit screens render a flat shape on each visit
+ * object:
+ *   - visit.images            -> ONLY the onsite "FIELD_PHOTO" images
+ *   - visit.businessCardFront -> direct URL string (or null)
+ *   - visit.businessCardBack  -> direct URL string (or null)
+ *   - visit.gstCertificate    -> direct URL string (or null)
+ *   - visit.quotationDoc      -> direct URL string (or null)
+ *   - visit.brochureDoc       -> direct URL string (or null)
+ *   - visit.contactPerson / visit.phoneNumber / visit.email / visit.notes
+ *     -> convenience fields derived from contacts/emails/discussionSummary
+ *
+ * This helper builds that exact shape from a raw Prisma FieldVisit record
+ * (with `images` + `employee` included) without losing any of the
+ * underlying structured data (contacts/emails/interestedProducts/images
+ * are still included in full for any consumer that needs the detail).
  */
 const presentFieldVisit = (visit) => {
     if (!visit) return visit;
 
     const contacts = Array.isArray(visit.contacts) ? visit.contacts : [];
     const emails = Array.isArray(visit.emails) ? visit.emails : [];
+    const allImages = Array.isArray(visit.images) ? visit.images : [];
 
     const primaryContact =
         contacts.find((c) => c?.isPrimary) || contacts[0] || null;
+
+    // Split the flat image rows back into:
+    //   - fieldPhotos -> rendered as the onsite gallery (visit.images)
+    //   - documents   -> flattened onto individual named fields
+    const fieldPhotos = [];
+    const documentUrls = {
+        businessCardFront: null,
+        businessCardBack: null,
+        gstCertificate: null,
+        quotationDoc: null,
+        brochureDoc: null,
+    };
+
+    for (const img of allImages) {
+        const docKey = IMAGE_TYPE_TO_DOC_KEY[img.imageType];
+        if (docKey) {
+            // Keep the most recent of each document type (images are
+            // already ordered by createdAt desc, so first wins).
+            if (!documentUrls[docKey]) {
+                documentUrls[docKey] = img.imageUrl;
+            }
+        } else {
+            // FIELD_PHOTO (or any other/unknown type) -> onsite gallery
+            fieldPhotos.push(img);
+        }
+    }
 
     return {
         ...visit,
@@ -74,6 +125,8 @@ const presentFieldVisit = (visit) => {
         interestedProducts: Array.isArray(visit.interestedProducts)
             ? visit.interestedProducts
             : [],
+        images: fieldPhotos,
+        ...documentUrls,
         // Flattened convenience fields expected by the UI list/dashboard views
         contactPerson: primaryContact?.name || null,
         contactDesignation: primaryContact?.designation || null,
@@ -85,13 +138,42 @@ const presentFieldVisit = (visit) => {
 
 const presentFieldVisitList = (visits) => visits.map(presentFieldVisit);
 
-const VISIT_INCLUDE = {
-    images: {
-        orderBy: { createdAt: "desc" },
-    },
-    employee: {
-        select: { id: true, name: true, email: true, marketingType: true },
-    },
+/**
+ * Shared image/document upload pipeline used by both create and update.
+ * Uploads any files present on req.files to Cloudflare and returns an
+ * array of FieldVisitImage row payloads ready for createMany().
+ */
+const buildImageUploadPayloads = async (req, visitId) => {
+    const imagePayloads = [];
+
+    if (!req.files) return imagePayloads;
+
+    if (req.files["images"]) {
+        for (const file of req.files["images"]) {
+            const uploaded = await uploadToCloudflare(file, "field-visits", visitId);
+            imagePayloads.push({
+                imageUrl: uploaded.imageUrl,
+                publicId: uploaded.publicId,
+                imageType: "FIELD_PHOTO",
+                visitId,
+            });
+        }
+    }
+
+    for (const key of Object.keys(DOCUMENT_TYPE_MAP)) {
+        const file = req.files[key]?.[0];
+        if (file) {
+            const uploaded = await uploadToCloudflare(file, "field-visits-docs", visitId);
+            imagePayloads.push({
+                imageUrl: uploaded.imageUrl,
+                publicId: uploaded.publicId,
+                imageType: DOCUMENT_TYPE_MAP[key],
+                visitId,
+            });
+        }
+    }
+
+    return imagePayloads;
 };
 
 /* ==========================================================
@@ -116,6 +198,7 @@ export const createFieldVisit = async (req, res) => {
             nextFollowUpMode,
             meetingResult,
             leadValue,
+            visitedDate,
             followUpDate,
             discussionSummary,
             referredByName,
@@ -180,6 +263,7 @@ export const createFieldVisit = async (req, res) => {
                 nextFollowUpMode: nextFollowUpMode?.trim() || "Call",
                 meetingResult: meetingResult?.trim() || "Discussed",
                 leadValue: parseNullableFloat(leadValue),
+                visitedDate: parseNullableDate(visitedDate) || new Date(),
                 followUpDate: parseNullableDate(followUpDate),
                 discussionSummary: discussionSummary?.trim() || null,
                 referredByName: referredByName?.trim() || null,
@@ -194,34 +278,7 @@ export const createFieldVisit = async (req, res) => {
         });
 
         // ----- Image / document upload pipeline -----
-        const imagePayloads = [];
-
-        if (req.files) {
-            if (req.files["images"]) {
-                for (const file of req.files["images"]) {
-                    const uploaded = await uploadToCloudflare(file, "field-visits", fieldVisit.id);
-                    imagePayloads.push({
-                        imageUrl: uploaded.imageUrl,
-                        publicId: uploaded.publicId,
-                        imageType: "FIELD_PHOTO",
-                        visitId: fieldVisit.id,
-                    });
-                }
-            }
-
-            for (const key of Object.keys(DOCUMENT_TYPE_MAP)) {
-                const file = req.files[key]?.[0];
-                if (file) {
-                    const uploaded = await uploadToCloudflare(file, "field-visits-docs", fieldVisit.id);
-                    imagePayloads.push({
-                        imageUrl: uploaded.imageUrl,
-                        publicId: uploaded.publicId,
-                        imageType: DOCUMENT_TYPE_MAP[key],
-                        visitId: fieldVisit.id,
-                    });
-                }
-            }
-        }
+        const imagePayloads = await buildImageUploadPayloads(req, fieldVisit.id);
 
         if (imagePayloads.length > 0) {
             await prisma.fieldVisitImage.createMany({ data: imagePayloads });
@@ -232,11 +289,10 @@ export const createFieldVisit = async (req, res) => {
             include: VISIT_INCLUDE,
         });
 
-        return res.status(201).json({
-            success: true,
-            message: "Field visit created successfully.",
-            data: presentFieldVisit(finalVisit),
-        });
+        // The UI's Add Visit screen does not read the response body on
+        // success (only the error path is inspected), but we still return
+        // the fully flattened visit for any consumer that does.
+        return res.status(201).json(presentFieldVisit(finalVisit));
     } catch (error) {
         console.error("createFieldVisit:", error);
         return res.status(500).json({
@@ -248,7 +304,7 @@ export const createFieldVisit = async (req, res) => {
 };
 
 /* ==========================================================
-   GET MY FIELD VISITS (supports optional search / filter / pagination
+   GET MY FIELD VISITS (supports optional search / filter
    query params, while still returning every record by default so the
    UI's own client-side filtering/pagination continues to work)
 ========================================================== */
@@ -292,6 +348,8 @@ export const getMyFieldVisits = async (req, res) => {
 
         const presented = presentFieldVisitList(visits);
 
+        // FieldAgentMyVisits.jsx / FieldAgentDashboard.jsx accept either a
+        // raw array or { visits: [...] } - we send the richer shape.
         return res.status(200).json({
             success: true,
             total: presented.length,
@@ -309,6 +367,10 @@ export const getMyFieldVisits = async (req, res) => {
 
 /* ==========================================================
    GET SINGLE FIELD VISIT
+   FieldAgentVisitDetails.jsx / FieldAgentEditVisit.jsx both read the
+   response body directly as the visit object (`setVisit(response.data)`),
+   not wrapped in { success, data } — so this endpoint returns the
+   flattened visit object directly at the top level.
 ========================================================== */
 
 export const getSingleFieldVisit = async (req, res) => {
@@ -334,10 +396,7 @@ export const getSingleFieldVisit = async (req, res) => {
             });
         }
 
-        return res.status(200).json({
-            success: true,
-            data: presentFieldVisit(visit),
-        });
+        return res.status(200).json(presentFieldVisit(visit));
     } catch (error) {
         console.error("getSingleFieldVisit:", error);
         return res.status(500).json({
@@ -351,7 +410,10 @@ export const getSingleFieldVisit = async (req, res) => {
 /* ==========================================================
    UPDATE FIELD VISIT
    Supports two call shapes used by the UI:
-     1. Full multipart/form-data edit (all fields + optional new files)
+     1. Full multipart/form-data edit (FieldAgentEditVisit.jsx) — all
+        fields + optional new files + `deletedImageIds` (JSON array of
+        FieldVisitImage ids to remove, covers both field photos and any
+        re-uploaded KYC documents).
      2. Partial JSON body update used by the Follow-ups screen, e.g.
         { followUpDate: "2026-07-01" } to reschedule, or
         { status: "CUSTOMER" } to mark a lead converted.
@@ -415,6 +477,9 @@ export const updateFieldVisit = async (req, res) => {
         if (body.leadValue !== undefined) data.leadValue = parseNullableFloat(body.leadValue);
 
         // ----- Date fields -----
+        if (body.visitedDate !== undefined) {
+            data.visitedDate = parseNullableDate(body.visitedDate);
+        }
         if (body.followUpDate !== undefined) {
             data.followUpDate = parseNullableDate(body.followUpDate);
         }
@@ -441,35 +506,45 @@ export const updateFieldVisit = async (req, res) => {
             await prisma.fieldVisit.update({ where: { id }, data });
         }
 
-        // ----- Newly attached images / documents (multipart edit only) -----
-        const uploadedFiles = [];
+        // ----- Deleted images (Edit screen's "Will Purge" flow) -----
+        // FieldAgentEditVisit.jsx always sends deletedImageIds (possibly
+        // an empty array) on every multipart submission; harmless no-op
+        // when empty, removes the marked rows (and re-uploaded document
+        // slots, since those are stored as FieldVisitImage rows too)
+        // when populated.
+        if (body.deletedImageIds !== undefined) {
+            const parsedDeletedIds = parseJsonField(body.deletedImageIds, []);
+            const deletedIds = Array.isArray(parsedDeletedIds)
+                ? parsedDeletedIds.filter(Boolean)
+                : [];
 
-        if (req.files) {
-            if (req.files["images"]) {
-                for (const file of req.files["images"]) {
-                    const uploaded = await uploadToCloudflare(file, "field-visits", id);
-                    uploadedFiles.push({
-                        imageUrl: uploaded.imageUrl,
-                        publicId: uploaded.publicId,
-                        imageType: "FIELD_PHOTO",
-                        visitId: id,
-                    });
-                }
-            }
-
-            for (const key of Object.keys(DOCUMENT_TYPE_MAP)) {
-                const file = req.files[key]?.[0];
-                if (file) {
-                    const uploaded = await uploadToCloudflare(file, "field-visits-docs", id);
-                    uploadedFiles.push({
-                        imageUrl: uploaded.imageUrl,
-                        publicId: uploaded.publicId,
-                        imageType: DOCUMENT_TYPE_MAP[key],
-                        visitId: id,
-                    });
-                }
+            if (deletedIds.length > 0) {
+                await prisma.fieldVisitImage.deleteMany({
+                    where: { id: { in: deletedIds }, visitId: id },
+                });
             }
         }
+
+        // ----- Newly attached images / documents (multipart edit only) -----
+        // Re-uploading a KYC/document slot (e.g. a new GST certificate)
+        // adds a new FieldVisitImage row of that type; presentFieldVisit
+        // always surfaces the most recently created row per document
+        // type, so the old one becomes orphaned data unless explicitly
+        // deleted — replace it outright here so a re-upload behaves like
+        // a real replace rather than leaving stale rows behind.
+        if (req.files) {
+            const replacingDocTypes = Object.keys(DOCUMENT_TYPE_MAP)
+                .filter((key) => req.files[key]?.[0])
+                .map((key) => DOCUMENT_TYPE_MAP[key]);
+
+            if (replacingDocTypes.length > 0) {
+                await prisma.fieldVisitImage.deleteMany({
+                    where: { visitId: id, imageType: { in: replacingDocTypes } },
+                });
+            }
+        }
+
+        const uploadedFiles = await buildImageUploadPayloads(req, id);
 
         if (uploadedFiles.length > 0) {
             await prisma.fieldVisitImage.createMany({ data: uploadedFiles });
@@ -480,11 +555,7 @@ export const updateFieldVisit = async (req, res) => {
             include: VISIT_INCLUDE,
         });
 
-        return res.status(200).json({
-            success: true,
-            message: "Field visit updated successfully.",
-            data: presentFieldVisit(updatedVisit),
-        });
+        return res.status(200).json(presentFieldVisit(updatedVisit));
     } catch (error) {
         console.error("updateFieldVisit:", error);
         return res.status(500).json({
@@ -591,7 +662,9 @@ export const getTodayFollowUps = async (req, res) => {
 /* ==========================================================
    GET DASHBOARD SUMMARY
    Field names below match exactly what FieldAgentDashboard.jsx and
-   FieldAgentProfile.jsx read off `summaryData`.
+   FieldAgentProfile.jsx read off `summaryData` (a flat top-level object,
+   no { success, ... } wrapper needed around the counts since the UI
+   reads e.g. `summaryData?.todayVisitsCount` straight off response.data).
 ========================================================== */
 
 export const getDashboardSummary = async (req, res) => {
