@@ -1,6 +1,6 @@
 // server/src/routes/geolocationRoutes.js
 import express from "express";
-import { reverseGeocode } from "../controller/geolocationController.js";
+import { reverseGeocode } from "../controller/Geolocationcontroller.js";
 
 const router = express.Router();
 
