@@ -11,7 +11,7 @@ import schoolRoutes from "./src/routes/schoolRoutes.js";
 import vehicleroutes from "./src/routes/vehicleroutes.js";
 import { startVehicleTrackingCron } from "./src/services/vehicleTracking.cron.js";
 import fieldVisitRoutes from "./src/routes/fieldVisitRoutes.js";
-import { reverseGeocode } from "./src/controller/geolocationController.js";
+import  reverseGeocode  from "./src/routes/geolocationRoutes.js";
 
 dotenv.config();
 
