@@ -7,8 +7,8 @@ import {
     AlertCircle, Briefcase, FileSpreadsheet, Eye, Loader2, Plus, History
 } from "lucide-react";
 import API from "../../api/axios";
-import FollowUpModal from "./FollowUpModal";
-import FollowUpTimeline from "./FollowUpTimeline";
+import FollowUpModal from "./Followupmodal";
+import FollowUpTimeline from "./Followuptimeline";
 import Toast from "./Toast";
 
 const FieldAgentVisitDetails = () => {
