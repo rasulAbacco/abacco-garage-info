@@ -7,7 +7,7 @@ import {
   CalendarClock, Loader2
 } from "lucide-react";
 import API from "../../api/axios";
-import FollowUpModal from "./FollowUpModal";
+import FollowUpModal from "./Followupmodal";
 import Toast from "./Toast";
 
 const FieldAgentMyVisits = () => {
