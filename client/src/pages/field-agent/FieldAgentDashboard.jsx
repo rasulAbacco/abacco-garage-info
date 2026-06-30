@@ -7,7 +7,8 @@ import {
 import {
     User, Calendar, Plus, Layers, Search, Phone, MessageSquare, ArrowUpRight,
     TrendingUp, CheckCircle, Clock, AlertTriangle, Users, BarChart3, ChevronRight,
-    Loader2, ShieldAlert, CheckCircle2, Bookmark, Mail, MapPin, ExternalLink
+    Loader2, ShieldAlert, CheckCircle2, Bookmark, Mail, MapPin, ExternalLink,
+    CalendarClock, CalendarCheck, AlarmClockOff
 } from "lucide-react";
 import API from "../../api/axios";
 
@@ -332,7 +333,57 @@ const FieldAgentDashboard = () => {
                             </div>
                         </section>
 
-                        {/* QUICK NAVIGATION ACTION CONSOLE TRIGGER LINKS */}
+                        {/* CRM FOLLOW-UP STATISTICS OVERLAY */}
+                        <section className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+
+                            {/* TODAY'S FOLLOW-UPS */}
+                            <div className="bg-white p-4 rounded-xl border border-orange-200 shadow-xs hover:shadow-md transition-all group relative">
+                                <div className="absolute top-3 right-3 text-orange-600 bg-orange-50 p-1.5 rounded-lg">
+                                    <CalendarClock className="w-4 h-4" />
+                                </div>
+                                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Today's Follow-ups</span>
+                                <span className="text-2xl font-black text-slate-900 block mt-1 tabular-nums">
+                                    {summaryData?.todayFollowUpsCount ?? 0}
+                                </span>
+                                <span className="text-[9px] text-slate-400 font-medium mt-1 block">Scheduled for today</span>
+                            </div>
+
+                            {/* UPCOMING FOLLOW-UPS */}
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs hover:shadow-md transition-all group relative">
+                                <div className="absolute top-3 right-3 text-indigo-600 bg-indigo-50 p-1.5 rounded-lg">
+                                    <CalendarCheck className="w-4 h-4" />
+                                </div>
+                                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Upcoming Follow-ups</span>
+                                <span className="text-2xl font-black text-slate-900 block mt-1 tabular-nums">
+                                    {summaryData?.upcomingFollowUpsCount ?? 0}
+                                </span>
+                                <span className="text-[9px] text-slate-400 font-medium mt-1 block">Scheduled ahead</span>
+                            </div>
+
+                            {/* OVERDUE FOLLOW-UPS */}
+                            <div className="bg-white p-4 rounded-xl border border-rose-200 shadow-xs hover:shadow-md transition-all group relative">
+                                <div className="absolute top-3 right-3 text-rose-600 bg-rose-50 p-1.5 rounded-lg">
+                                    <AlarmClockOff className="w-4 h-4" />
+                                </div>
+                                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Overdue Follow-ups</span>
+                                <span className="text-2xl font-black text-rose-600 block mt-1 tabular-nums">
+                                    {summaryData?.overdueFollowUpsCount ?? 0}
+                                </span>
+                                <span className="text-[9px] text-slate-400 font-medium mt-1 block">Past due, needs action</span>
+                            </div>
+
+                            {/* COMPLETED TODAY */}
+                            <div className="bg-white p-4 rounded-xl border border-emerald-200 shadow-xs hover:shadow-md transition-all group relative">
+                                <div className="absolute top-3 right-3 text-emerald-600 bg-emerald-50 p-1.5 rounded-lg">
+                                    <CheckCircle className="w-4 h-4" />
+                                </div>
+                                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Completed Today</span>
+                                <span className="text-2xl font-black text-emerald-600 block mt-1 tabular-nums">
+                                    {summaryData?.completedTodayCount ?? 0}
+                                </span>
+                                <span className="text-[9px] text-slate-400 font-medium mt-1 block">Closed out today</span>
+                            </div>
+                        </section>
                         <section className="bg-white rounded-xl border border-slate-200 shadow-xs p-4 grid grid-cols-2 md:grid-cols-4 gap-3">
                             <button
                                 onClick={() => navigate("/field-agent-dashboard/add-visit")}

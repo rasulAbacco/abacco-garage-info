@@ -12,6 +12,8 @@ import vehicleroutes from "./src/routes/vehicleroutes.js";
 import { startVehicleTrackingCron } from "./src/services/vehicleTracking.cron.js";
 import fieldVisitRoutes from "./src/routes/fieldVisitRoutes.js";
 import reverseGeocode from "./src/routes/geolocationRoutes.js";
+import followUpRoutes from "./src/routes/followUpRoutes.js";
+
 
 dotenv.config();
 
@@ -95,6 +97,8 @@ app.use("/api/field-visit", fieldVisitRoutes);
 app.use("/api/school", schoolRoutes);
 app.use("/api/vehicles", vehicleroutes);
 app.use("/api/geolocation", reverseGeocode);
+app.use("/api/follow-up", followUpRoutes);
+
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

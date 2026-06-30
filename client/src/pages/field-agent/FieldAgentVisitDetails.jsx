@@ -4,9 +4,12 @@ import {
     MapPin, Phone, MessageSquare, Calendar, User, Mail, Trash2, Edit3, X,
     ChevronLeft, ChevronRight, Download, ZoomIn, ZoomOut, Building, Layers,
     FileText, ArrowLeft, ExternalLink, Copy, CheckCircle2, UserCheck, Clock,
-    AlertCircle, Briefcase, FileSpreadsheet, Eye, Loader2
+    AlertCircle, Briefcase, FileSpreadsheet, Eye, Loader2, Plus, History
 } from "lucide-react";
 import API from "../../api/axios";
+import FollowUpModal from "./FollowUpModal";
+import FollowUpTimeline from "./FollowUpTimeline";
+import Toast from "./Toast";
 
 const FieldAgentVisitDetails = () => {
     const { id } = useParams();
@@ -18,6 +21,8 @@ const FieldAgentVisitDetails = () => {
     const [error, setError] = useState(null);
     const [deleteModal, setDeleteModal] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [showFollowUpModal, setShowFollowUpModal] = useState(false);
+    const [toast, setToast] = useState(null); // { message, type }
 
     // Lightbox Modal States
     const [lightbox, setLightbox] = useState({ show: false, images: [], index: 0, scale: 1 });
@@ -169,6 +174,12 @@ const FieldAgentVisitDetails = () => {
 
                     {/* SYSTEM RESOURCE CONTROLS INTERFACE */}
                     <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
+                        <button
+                            onClick={() => setShowFollowUpModal(true)}
+                            className="flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 bg-slate-950 hover:bg-slate-800 text-white font-bold py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                        >
+                            <Plus className="w-3.5 h-3.5" /> Add Follow-up
+                        </button>
                         <button
                             onClick={() => navigate(`/field-agent-dashboard/edit-visit/${visit.id}`)}
                             className="flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-bold py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
@@ -461,27 +472,20 @@ const FieldAgentVisitDetails = () => {
                             </section>
                         )}
 
-                        {/* TIMELINE MATRIX DISPLAY TRACK */}
+                        {/* FOLLOW-UP CRM TIMELINE TRACK (newest first) */}
                         <section className="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 shadow-2xs space-y-4">
-                            <div className="font-bold uppercase tracking-wider text-slate-500 text-[10px] pb-2 border-b border-slate-100">
-                                Outreach Timeline Milestones
-                            </div>
-                            <div className="space-y-4 relative before:absolute before:inset-y-1 before:left-[9px] before:w-[1px] before:bg-slate-200 pl-1 text-xs">
-                                <div className="flex gap-3 relative items-start">
-                                    <div className="h-5 w-5 rounded-full bg-slate-950 text-white shadow-xs flex items-center justify-center shrink-0 z-10"><CheckCircle2 className="w-3 h-3" /></div>
-                                    <div>
-                                        <p className="font-bold text-slate-800">Initial Pipeline Generation</p>
-                                        <span className="text-[10px] font-mono text-slate-400 block mt-0.5">{formatDateString(visit.createdAt)}</span>
-                                    </div>
+                            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                                <div className="flex items-center gap-2 font-bold uppercase tracking-wider text-slate-500 text-[10px]">
+                                    <History className="w-3.5 h-3.5" /> Follow-up Timeline
                                 </div>
-                                <div className="flex gap-3 relative items-start">
-                                    <div className="h-5 w-5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 shadow-xs flex items-center justify-center shrink-0 z-10"><Clock className="w-3 h-3" /></div>
-                                    <div>
-                                        <p className="font-bold text-slate-800">Parameter Configuration Sync</p>
-                                        <span className="text-[10px] font-mono text-slate-400 block mt-0.5">{formatDateString(visit.updatedAt || visit.createdAt)}</span>
-                                    </div>
-                                </div>
+                                <button
+                                    onClick={() => setShowFollowUpModal(true)}
+                                    className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-700 hover:text-slate-950 cursor-pointer"
+                                >
+                                    <Plus className="w-3 h-3" /> Add
+                                </button>
                             </div>
+                            <FollowUpTimeline followUps={visit.followUps || []} />
                         </section>
                     </div>
 
@@ -575,6 +579,29 @@ const FieldAgentVisitDetails = () => {
                     </div>
                 </div>
             )}
+
+            {/* CRM FOLLOW-UP MODAL */}
+            {showFollowUpModal && (
+                <FollowUpModal
+                    visitId={visit.id}
+                    onClose={() => setShowFollowUpModal(false)}
+                    onSaved={(followUps) => {
+                        const latest = followUps[0] || null;
+                        setVisit(prev => prev ? {
+                            ...prev,
+                            followUps,
+                            nextFollowUpDate: latest?.followUpDate || prev.nextFollowUpDate,
+                            followUpDate: latest?.followUpDate || prev.followUpDate,
+                            latestFollowUpRemark: latest?.remark || prev.latestFollowUpRemark,
+                            latestFollowUpStatus: latest?.status || prev.latestFollowUpStatus,
+                            latestFollowUpPriority: latest?.priority || prev.latestFollowUpPriority,
+                        } : prev);
+                    }}
+                    onToast={(message, type) => setToast({ message, type })}
+                />
+            )}
+
+            {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
         </div>
     );
