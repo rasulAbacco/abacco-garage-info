@@ -3,9 +3,12 @@ import { useNavigate } from "react-router-dom";
 import {
   Search, Filter, ChevronLeft, ChevronRight, Phone, MessageSquare,
   MapPin, Calendar, User, Mail, Trash2, Eye, Edit3, X, Image as ImageIcon,
-  Building, BarChart3, AlertCircle, Plus, Layers, ArrowUpDown, CheckCircle2
+  Building, BarChart3, AlertCircle, Plus, Layers, ArrowUpDown, CheckCircle2,
+  CalendarClock, Loader2
 } from "lucide-react";
 import API from "../../api/axios";
+import FollowUpModal from "./FollowUpModal";
+import Toast from "./Toast";
 
 const FieldAgentMyVisits = () => {
   const navigate = useNavigate();
@@ -22,6 +25,11 @@ const FieldAgentMyVisits = () => {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [marketingFilter, setMarketingFilter] = useState("ALL");
   const [sortBy, setSortBy] = useState("NEWEST");
+  const [followUpFilter, setFollowUpFilter] = useState("ALL"); // ALL | TODAY | TOMORROW | OVERDUE | THIS_WEEK | COMPLETED
+
+  // Follow-up modal / toast state
+  const [followUpModalVisitId, setFollowUpModalVisitId] = useState(null);
+  const [toast, setToast] = useState(null); // { message, type }
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -107,6 +115,27 @@ const FieldAgentMyVisits = () => {
     return stats;
   }, [visits]);
 
+  // ----- Follow-up date bucket helper (Today / Tomorrow / Overdue / This Week / Completed) -----
+  const getFollowUpBucket = (visit) => {
+    const nextDate = visit.nextFollowUpDate || visit.followUpDate;
+    const status = visit.latestFollowUpStatus;
+    if (status === "Customer" || status === "Not Interested") return "COMPLETED";
+    if (!nextDate) return null;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const target = new Date(nextDate);
+    target.setHours(0, 0, 0, 0);
+
+    const diffDays = Math.round((target - today) / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) return "OVERDUE";
+    if (diffDays === 0) return "TODAY";
+    if (diffDays === 1) return "TOMORROW";
+    if (diffDays > 1 && diffDays <= 7) return "THIS_WEEK";
+    return null;
+  };
+
   // Transformation Pipelines: Search, Custom Filter, and Sort Matrix
   const processedVisits = useMemo(() => {
     let output = [...visits];
@@ -120,7 +149,8 @@ const FieldAgentMyVisits = () => {
         v.phoneNumber?.toLowerCase().includes(target) ||
         v.city?.toLowerCase().includes(target) ||
         v.state?.toLowerCase().includes(target) ||
-        v.marketingType?.toLowerCase().includes(target)
+        v.marketingType?.toLowerCase().includes(target) ||
+        v.latestFollowUpRemark?.toLowerCase().includes(target)
       );
     }
 
@@ -133,6 +163,11 @@ const FieldAgentMyVisits = () => {
       output = output.filter(v => v.marketingType?.toUpperCase() === marketingFilter);
     }
 
+    // Follow-up date bucket filter (Today / Tomorrow / Overdue / This Week / Completed)
+    if (followUpFilter !== "ALL") {
+      output = output.filter(v => getFollowUpBucket(v) === followUpFilter);
+    }
+
     // Evaluation Metric Sorting Routines Execution Layer
     output.sort((a, b) => {
       if (sortBy === "NEWEST") {
@@ -141,10 +176,26 @@ const FieldAgentMyVisits = () => {
       if (sortBy === "OLDEST") {
         return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
       }
-      if (sortBy === "FOLLOW_UP") {
-        if (!a.followUpDate) return 1;
-        if (!b.followUpDate) return -1;
-        return new Date(a.followUpDate) - new Date(b.followUpDate);
+      if (sortBy === "FOLLOW_UP" || sortBy === "FOLLOWUP_NEAREST") {
+        const aDate = a.nextFollowUpDate || a.followUpDate;
+        const bDate = b.nextFollowUpDate || b.followUpDate;
+        if (!aDate) return 1;
+        if (!bDate) return -1;
+        return new Date(aDate) - new Date(bDate);
+      }
+      if (sortBy === "FOLLOWUP_OLDEST") {
+        const aDate = a.nextFollowUpDate || a.followUpDate;
+        const bDate = b.nextFollowUpDate || b.followUpDate;
+        if (!aDate) return 1;
+        if (!bDate) return -1;
+        return new Date(bDate) - new Date(aDate);
+      }
+      if (sortBy === "FOLLOWUP_NEWEST") {
+        const aDate = a.followUps?.[0]?.createdAt;
+        const bDate = b.followUps?.[0]?.createdAt;
+        if (!aDate) return 1;
+        if (!bDate) return -1;
+        return new Date(bDate) - new Date(aDate);
       }
       if (sortBy === "TITLE") {
         return (a.title || "").localeCompare(b.title || "");
@@ -153,7 +204,7 @@ const FieldAgentMyVisits = () => {
     });
 
     return output;
-  }, [visits, debouncedSearch, statusFilter, marketingFilter, sortBy]);
+  }, [visits, debouncedSearch, statusFilter, marketingFilter, sortBy, followUpFilter]);
 
   // Structured Pagination Slicing Allocation Window
   const totalPages = Math.ceil(processedVisits.length / recordsPerPage) || 1;
@@ -202,6 +253,23 @@ const FieldAgentMyVisits = () => {
     if (m === "RESTAURANT") return "bg-orange-600 text-white";
     if (m === "HOTEL") return "bg-cyan-600 text-white";
     return "bg-slate-500 text-white"; // General tracking matrix allocation
+  };
+
+  const getPriorityBadgeStyle = (p) => {
+    const pr = p?.toUpperCase() || "MEDIUM";
+    if (pr === "HIGH") return "text-rose-700 bg-rose-50 border-rose-200";
+    if (pr === "LOW") return "text-slate-500 bg-slate-100 border-slate-200";
+    return "text-amber-700 bg-amber-50 border-amber-200";
+  };
+
+  // Card border color by follow-up bucket: orange = today, red = overdue,
+  // green = completed (Customer / Not Interested outcome logged).
+  const getCardBorderClass = (visit) => {
+    const bucket = getFollowUpBucket(visit);
+    if (bucket === "TODAY") return "border-orange-400";
+    if (bucket === "OVERDUE") return "border-rose-500";
+    if (bucket === "COMPLETED") return "border-emerald-400";
+    return "border-slate-200";
   };
 
   return (
@@ -346,6 +414,25 @@ const FieldAgentMyVisits = () => {
               </select>
             </div>
 
+            {/* FOLLOW-UP DATE BUCKET FILTER */}
+            <div className="md:col-span-2 relative flex items-center">
+              <span className="absolute left-3 text-slate-400 pointer-events-none">
+                <CalendarClock className="w-3.5 h-3.5" />
+              </span>
+              <select
+                value={followUpFilter}
+                onChange={(e) => setFollowUpFilter(e.target.value)}
+                className="w-full pl-8 pr-2 py-2 text-xs font-semibold border border-slate-300 rounded-lg bg-white text-slate-700 outline-none focus:border-slate-900"
+              >
+                <option value="ALL">All Follow-ups</option>
+                <option value="TODAY">Today</option>
+                <option value="TOMORROW">Tomorrow</option>
+                <option value="OVERDUE">Overdue</option>
+                <option value="THIS_WEEK">This Week</option>
+                <option value="COMPLETED">Completed</option>
+              </select>
+            </div>
+
             {/* SORT DISPATCH DIRECTION MATRIX SORTING LAYERS */}
             <div className="md:col-span-3 relative flex items-center">
               <span className="absolute left-3 text-slate-400 pointer-events-none">
@@ -358,7 +445,9 @@ const FieldAgentMyVisits = () => {
               >
                 <option value="NEWEST">Sorting: Newest Records</option>
                 <option value="OLDEST">Sorting: Oldest Records</option>
-                <option value="FOLLOW_UP">Sorting: Follow-up Timeline</option>
+                <option value="FOLLOWUP_NEAREST">Sorting: Nearest Follow-up</option>
+                <option value="FOLLOWUP_OLDEST">Sorting: Oldest Follow-up</option>
+                <option value="FOLLOWUP_NEWEST">Sorting: Newest Follow-up</option>
                 <option value="TITLE">Sorting: Alpha Business Title</option>
               </select>
             </div>
@@ -366,11 +455,11 @@ const FieldAgentMyVisits = () => {
           </div>
 
           {/* ACTIVE FILTER DISPATCH META BANNER SUMMARY */}
-          {(statusFilter !== "ALL" || marketingFilter !== "ALL" || debouncedSearch.trim() !== "") && (
+          {(statusFilter !== "ALL" || marketingFilter !== "ALL" || followUpFilter !== "ALL" || debouncedSearch.trim() !== "") && (
             <div className="flex items-center justify-between text-[11px] font-bold bg-slate-50 px-3 py-1.5 rounded-lg text-slate-500 uppercase tracking-wider border border-slate-100">
               <span>Matching Pipeline Array Vector Size Metrics: {processedVisits.length} leads tracked</span>
               <button
-                onClick={() => { setSearchTerm(""); setStatusFilter("ALL"); setMarketingFilter("ALL"); setSortBy("NEWEST"); }}
+                onClick={() => { setSearchTerm(""); setStatusFilter("ALL"); setMarketingFilter("ALL"); setSortBy("NEWEST"); setFollowUpFilter("ALL"); }}
                 className="text-slate-900 hover:underline cursor-pointer"
               >
                 Clear Operational Filter Parameters
@@ -441,7 +530,7 @@ const FieldAgentMyVisits = () => {
                 return (
                   <div
                     key={visit.id}
-                    className="bg-white rounded-xl border border-slate-200 shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col overflow-hidden group"
+                    className={`bg-white rounded-xl border-2 shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col overflow-hidden group ${getCardBorderClass(visit)}`}
                   >
 
                     {/* VISUAL ASSET COVER IMAGE WRAPPER LAYER (Hover Zoom Functionality Embedded) */}
@@ -513,22 +602,28 @@ const FieldAgentMyVisits = () => {
                           </div>
                         </div>
 
-                        {/* CRITICAL TIMELINE FOLLOW-UP TARGET BAR CONTAINER */}
-                        <div className="bg-slate-50 border border-slate-200/60 rounded-lg p-2 flex items-center justify-between text-xs">
-                          <span className="font-bold text-slate-400 uppercase tracking-wider text-[9px] flex items-center gap-1">
-                            <Calendar className="w-3 h-3 text-slate-400" /> Matrix Follow Up:
-                          </span>
-                          <span className="font-semibold text-slate-800 bg-white border border-slate-200 rounded px-2 py-0.5 text-[11px]">
-                            {formatDateString(visit.followUpDate)}
-                          </span>
-                        </div>
-
-                        {/* DESCRIPTIVE DIALOGUE STRATEGIC DISCUSSION LOG */}
-                        {visit.notes && (
-                          <div className="bg-slate-50/50 border-l-2 border-slate-300 px-2.5 py-1.5 text-xs text-slate-500 italic line-clamp-2 leading-relaxed">
-                            "{visit.notes}"
+                        {/* NEXT FOLLOW-UP CRM SUMMARY BAR (latest VisitFollowUp entry) */}
+                        <div className="bg-slate-50 border border-slate-200/60 rounded-lg p-2.5 space-y-1.5 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-slate-400 uppercase tracking-wider text-[9px] flex items-center gap-1">
+                              <Calendar className="w-3 h-3 text-slate-400" /> Next Follow-up:
+                            </span>
+                            <span className="font-semibold text-slate-800 bg-white border border-slate-200 rounded px-2 py-0.5 text-[11px]">
+                              {formatDateString(visit.nextFollowUpDate || visit.followUpDate)}
+                            </span>
                           </div>
-                        )}
+                          {visit.latestFollowUpRemark && (
+                            <p className="text-[11px] text-slate-500 italic line-clamp-2 leading-relaxed">
+                              "{visit.latestFollowUpRemark}"
+                            </p>
+                          )}
+                          <div className="flex items-center justify-between pt-1 border-t border-slate-200/70">
+                            <span className="font-bold text-slate-400 uppercase tracking-wider text-[9px]">Priority</span>
+                            <span className={`px-2 py-0.5 rounded-md text-[10px] border font-bold ${getPriorityBadgeStyle(visit.latestFollowUpPriority || visit.priority)}`}>
+                              {visit.latestFollowUpPriority || visit.priority || "Medium"}
+                            </span>
+                          </div>
+                        </div>
                       </div>
 
                       {/* INTEGRATED COMMUNICATION & LOGISTICS TRIGGER CONSOLE GRID */}
@@ -585,6 +680,14 @@ const FieldAgentMyVisits = () => {
                           </button>
                         </div>
 
+                        {/* CRM FOLLOW-UP HISTORY QUICK-ADD TRIGGER */}
+                        <button
+                          onClick={() => setFollowUpModalVisitId(visit.id)}
+                          className="inline-flex items-center justify-center gap-1.5 bg-slate-950 hover:bg-slate-800 text-white py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Add Follow-up
+                        </button>
+
                       </div>
 
                     </div>
@@ -620,8 +723,8 @@ const FieldAgentMyVisits = () => {
                         key={pageNumber}
                         onClick={() => setCurrentPage(pageNumber)}
                         className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer border ${currentPage === pageNumber
-                            ? "bg-slate-950 text-white border-slate-950 shadow-xs"
-                            : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                          ? "bg-slate-950 text-white border-slate-950 shadow-xs"
+                          : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
                           }`}
                       >
                         {pageNumber}
@@ -730,6 +833,33 @@ const FieldAgentMyVisits = () => {
           </div>
         </div>
       )}
+
+      {/* CRM FOLLOW-UP MODAL: Add Follow-up entry without leaving the list view */}
+      {followUpModalVisitId && (
+        <FollowUpModal
+          visitId={followUpModalVisitId}
+          onClose={() => setFollowUpModalVisitId(null)}
+          onSaved={(followUps) => {
+            // Refresh just this visit card in place (no page reload).
+            setVisits(prev => prev.map(v => {
+              if (v.id !== followUpModalVisitId) return v;
+              const latest = followUps[0] || null;
+              return {
+                ...v,
+                followUps,
+                nextFollowUpDate: latest?.followUpDate || v.nextFollowUpDate,
+                followUpDate: latest?.followUpDate || v.followUpDate,
+                latestFollowUpRemark: latest?.remark || v.latestFollowUpRemark,
+                latestFollowUpStatus: latest?.status || v.latestFollowUpStatus,
+                latestFollowUpPriority: latest?.priority || v.latestFollowUpPriority,
+              };
+            }));
+          }}
+          onToast={(message, type) => setToast({ message, type })}
+        />
+      )}
+
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
     </div>
   );

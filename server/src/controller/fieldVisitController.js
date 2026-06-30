@@ -63,6 +63,9 @@ const VISIT_INCLUDE = {
     employee: {
         select: { id: true, name: true, email: true, marketingType: true },
     },
+    followUps: {
+        orderBy: { followUpDate: "desc" },
+    },
 };
 
 /**
@@ -88,6 +91,11 @@ const presentFieldVisit = (visit) => {
     const contacts = Array.isArray(visit.contacts) ? visit.contacts : [];
     const emails = Array.isArray(visit.emails) ? visit.emails : [];
     const allImages = Array.isArray(visit.images) ? visit.images : [];
+    const followUps = Array.isArray(visit.followUps) ? visit.followUps : [];
+    // followUps is already ordered newest-first (by followUpDate desc); the
+    // most recent entry drives the card summary (next follow-up date,
+    // latest remark, priority badge).
+    const latestFollowUp = followUps[0] || null;
 
     const primaryContact =
         contacts.find((c) => c?.isPrimary) || contacts[0] || null;
@@ -133,6 +141,12 @@ const presentFieldVisit = (visit) => {
         phoneNumber: primaryContact?.phoneNumber || null,
         email: emails[0] || null,
         notes: visit.discussionSummary || null,
+        // ----- Follow-up CRM history (newest first) + card summary -----
+        followUps,
+        nextFollowUpDate: latestFollowUp?.followUpDate || visit.followUpDate || null,
+        latestFollowUpRemark: latestFollowUp?.remark || null,
+        latestFollowUpStatus: latestFollowUp?.status || null,
+        latestFollowUpPriority: latestFollowUp?.priority || visit.priority || null,
     };
 };
 
@@ -702,6 +716,10 @@ export const getDashboardSummary = async (req, res) => {
             pendingFollowUpsCount,
             interestedLeadsCount,
             closedDealsCount,
+            todayFollowUpsCount,
+            upcomingFollowUpsCount,
+            overdueFollowUpsCount,
+            completedTodayCount,
         ] = await Promise.all([
             prisma.fieldVisit.count({ where: { employeeId: userId } }),
             prisma.fieldVisit.count({
@@ -729,6 +747,41 @@ export const getDashboardSummary = async (req, res) => {
             prisma.fieldVisit.count({
                 where: { employeeId: userId, status: "CUSTOMER" },
             }),
+            // Today's follow-ups: any visit (for this agent) whose latest
+            // follow-up entry falls within today.
+            prisma.visitFollowUp.count({
+                where: {
+                    visit: { employeeId: userId },
+                    followUpDate: { gte: startOfToday, lte: endOfToday },
+                },
+            }),
+            // Upcoming follow-ups: scheduled strictly after today.
+            prisma.visitFollowUp.count({
+                where: {
+                    visit: { employeeId: userId },
+                    followUpDate: { gt: endOfToday },
+                },
+            }),
+            // Overdue follow-ups: scheduled before today and the visit is
+            // still active (not converted/closed/dropped).
+            prisma.visitFollowUp.count({
+                where: {
+                    visit: {
+                        employeeId: userId,
+                        status: { notIn: ["CUSTOMER", "CLOSED", "NOT_INTERESTED"] },
+                    },
+                    followUpDate: { lt: startOfToday },
+                },
+            }),
+            // Completed today: follow-up entries logged today whose status
+            // reflects a completed/converted outcome.
+            prisma.visitFollowUp.count({
+                where: {
+                    visit: { employeeId: userId },
+                    status: { in: ["Customer", "Not Interested"] },
+                    updatedAt: { gte: startOfToday, lte: endOfToday },
+                },
+            }),
         ]);
 
         return res.status(200).json({
@@ -739,6 +792,10 @@ export const getDashboardSummary = async (req, res) => {
             pendingFollowUpsCount,
             interestedLeadsCount,
             closedDealsCount,
+            todayFollowUpsCount,
+            upcomingFollowUpsCount,
+            overdueFollowUpsCount,
+            completedTodayCount,
         });
     } catch (error) {
         console.error("getDashboardSummary:", error);

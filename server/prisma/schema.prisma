@@ -288,6 +288,7 @@ model FieldVisit {
   employeeId String
   employee   User              @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   images     FieldVisitImage[]
+  followUps  VisitFollowUp[]
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
 
@@ -295,6 +296,32 @@ model FieldVisit {
   @@index([marketingType])
   @@index([status])
   @@index([followUpDate])
+}
+
+// Full CRM Follow-up History for a FieldVisit. A visit can have unlimited
+// follow-up entries; the visit's flat `followUpDate` column continues to be
+// kept in sync with the most recent entry's followUpDate so existing
+// dashboard/today-followups queries keep working unmodified.
+model VisitFollowUp {
+  id String @id @default(cuid())
+
+  visitId String
+  visit   FieldVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  remark   String @db.Text
+  status   String @default("Pending") // Pending | Follow Up | Interested | Customer | Not Interested
+  priority String @default("Medium") // Low | Medium | High
+
+  followUpDate DateTime
+
+  createdBy String? // employeeId of the agent who logged this entry
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([visitId])
+  @@index([followUpDate])
+  @@index([status])
 }
 
 model FieldVisitImage {

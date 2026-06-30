@@ -2,26 +2,30 @@
 import express from "express";
 import upload from "../middleware/uploadMiddleware.js";
 import {
-    createFieldVisit,
-    getMyFieldVisits,
-    getSingleFieldVisit,
-    updateFieldVisit,
-    deleteFieldVisit,
-    getTodayFollowUps,
-    getDashboardSummary,
+   createFieldVisit,
+   getMyFieldVisits,
+   getSingleFieldVisit,
+   updateFieldVisit,
+   deleteFieldVisit,
+   getTodayFollowUps,
+   getDashboardSummary,
 } from "../controller/fieldVisitController.js";
+import {
+   createFollowUp,
+   getFollowUpsForVisit,
+} from "../controller/followUpController.js";
 
 const router = express.Router();
 
 // Multer fields map matching the UI's multi-stream uploader parameters
 // (onsite field photos + the five single KYC/document slots).
 const fieldVisitUploadFields = upload.fields([
-    { name: "images", maxCount: 10 },
-    { name: "businessCardFront", maxCount: 1 },
-    { name: "businessCardBack", maxCount: 1 },
-    { name: "gstCertificate", maxCount: 1 },
-    { name: "quotationDoc", maxCount: 1 },
-    { name: "brochureDoc", maxCount: 1 },
+   { name: "images", maxCount: 10 },
+   { name: "businessCardFront", maxCount: 1 },
+   { name: "businessCardBack", maxCount: 1 },
+   { name: "gstCertificate", maxCount: 1 },
+   { name: "quotationDoc", maxCount: 1 },
+   { name: "brochureDoc", maxCount: 1 },
 ]);
 
 /* ==========================================================
@@ -39,6 +43,10 @@ const fieldVisitUploadFields = upload.fields([
 
 router.post("/create", fieldVisitUploadFields, createFieldVisit);
 router.put("/:id", fieldVisitUploadFields, updateFieldVisit);
+
+/* ----- CRM Follow-up History (nested under a visit) ----- */
+router.post("/:visitId/follow-up", createFollowUp);
+router.get("/:visitId/follow-ups", getFollowUpsForVisit);
 
 router.get("/dashboard/:userId", getDashboardSummary);
 router.get("/employee/:userId/today-followups", getTodayFollowUps);
