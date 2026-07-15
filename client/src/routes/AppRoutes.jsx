@@ -17,6 +17,7 @@ import AdminAttendance from "../pages/admin/AdminAttendance";
 import AdminGarageVisits from "../pages/admin/AdminGarageVisits";
 import AdminSchools from "../pages/admin/AdminSchools";
 import AdminVehicles from "../pages/admin/AdminVehicles";
+import AdminFieldAgents from "../pages/admin/AdminFieldAgents";
 
 import EmployeeDashboard from "../pages/employee/EmployeeDashboard";
 import EmployeeLeads from "../pages/employee/EmployeeLeads";
@@ -44,7 +45,6 @@ import ProtectedRoute from "../components/common/ProtectedRoute";
 const AppRoutes = () => {
   return (
     <Routes>
-
       {/* LOGIN */}
       <Route path="/" element={<Login />} />
 
@@ -59,50 +59,25 @@ const AppRoutes = () => {
       >
         <Route index element={<AdminDashboard />} />
 
-        <Route
-          path="employees"
-          element={<AdminEmployees />}
-        />
+        <Route path="employees" element={<AdminEmployees />} />
 
-        <Route
-          path="reports"
-          element={<AdminReports />}
-        />
+        <Route path="reports" element={<AdminReports />} />
 
-        <Route
-          path="settings"
-          element={<AdminSettings />}
-        />
+        <Route path="settings" element={<AdminSettings />} />
 
-        <Route
-          path="add-employee"
-          element={<AddEmployee />}
-        />
+        <Route path="add-employee" element={<AddEmployee />} />
 
-        <Route
-          path="attendance"
-          element={<AdminAttendance />}
-        />
+        <Route path="attendance" element={<AdminAttendance />} />
 
-        <Route
-          path="garage-visits"
-          element={<AdminGarageVisits />}
-        />
+        <Route path="garage-visits" element={<AdminGarageVisits />} />
 
-        <Route
-          path="schools"
-          element={<AdminSchools />}
-        />
+        <Route path="schools" element={<AdminSchools />} />
 
-        <Route
-          path="schools/:id"
-          element={<SchoolDetails />}
-        />
+        <Route path="schools/:id" element={<SchoolDetails />} />
 
-        <Route
-          path="vehicles"
-          element={<AdminVehicles />}
-        />
+        <Route path="vehicles" element={<AdminVehicles />} />
+
+        <Route path="field-agents" element={<AdminFieldAgents />} />
       </Route>
 
       {/* ===================== EMPLOYEE ===================== */}
@@ -116,45 +91,21 @@ const AppRoutes = () => {
       >
         <Route index element={<EmployeeDashboard />} />
 
-        <Route
-          path="attendance"
-          element={<EmployeeAttendance />}
-        />
+        <Route path="attendance" element={<EmployeeAttendance />} />
 
-        <Route
-          path="add-garage"
-          element={<AddGarageVisit />}
-        />
+        <Route path="add-garage" element={<AddGarageVisit />} />
 
-        <Route
-          path="add-school"
-          element={<AddSchool />}
-        />
+        <Route path="add-school" element={<AddSchool />} />
 
-        <Route
-          path="schools"
-          element={<EmployeeSchools />}
-        />
+        <Route path="schools" element={<EmployeeSchools />} />
 
-        <Route
-          path="schools/:id"
-          element={<SchoolDetails />}
-        />
+        <Route path="schools/:id" element={<SchoolDetails />} />
 
-        <Route
-          path="followups"
-          element={<EmployeeFollowUps />}
-        />
+        <Route path="followups" element={<EmployeeFollowUps />} />
 
-        <Route
-          path="leads"
-          element={<EmployeeLeads />}
-        />
+        <Route path="leads" element={<EmployeeLeads />} />
 
-        <Route
-          path="visits"
-          element={<EmployeeVisits />}
-        />
+        <Route path="visits" element={<EmployeeVisits />} />
       </Route>
 
       {/* ===================== FIELD AGENT ===================== */}
@@ -168,42 +119,20 @@ const AppRoutes = () => {
       >
         <Route index element={<FieldAgentDashboard />} />
 
-        <Route
-          path="attendance"
-          element={<FieldAgentAttendance />}
-        />
+        <Route path="attendance" element={<FieldAgentAttendance />} />
 
-        <Route
-          path="add-visit"
-          element={<FieldAgentAddVisit />}
-        />
+        <Route path="add-visit" element={<FieldAgentAddVisit />} />
 
-        <Route
-          path="my-visits"
-          element={<FieldAgentMyVisits />}
-        />
+        <Route path="my-visits" element={<FieldAgentMyVisits />} />
 
-        <Route
-          path="followups"
-          element={<FieldAgentFollowUps />}
-        />
+        <Route path="followups" element={<FieldAgentFollowUps />} />
 
-        <Route
-          path="profile"
-          element={<FieldAgentProfile />}
-        />
+        <Route path="profile" element={<FieldAgentProfile />} />
 
-        <Route
-          path="visit/:id"
-          element={<FieldAgentVisitDetails />}
-        />
+        <Route path="visit/:id" element={<FieldAgentVisitDetails />} />
 
-        <Route
-          path="edit-visit/:id"
-          element={<FieldAgentEditVisit />}
-        />
+        <Route path="edit-visit/:id" element={<FieldAgentEditVisit />} />
       </Route>
-
     </Routes>
   );
 };

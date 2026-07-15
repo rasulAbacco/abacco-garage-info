@@ -2,17 +2,20 @@
 import express from "express";
 import upload from "../middleware/uploadMiddleware.js";
 import {
-   createFieldVisit,
-   getMyFieldVisits,
-   getSingleFieldVisit,
-   updateFieldVisit,
-   deleteFieldVisit,
-   getTodayFollowUps,
-   getDashboardSummary,
+  createFieldVisit,
+  getMyFieldVisits,
+  getSingleFieldVisit,
+  updateFieldVisit,
+  deleteFieldVisit,
+  getTodayFollowUps,
+  getDashboardSummary,
+  getAdminFieldVisits,
+  getFieldAgentsList,
+  getAdminFieldVisitSummary,
 } from "../controller/fieldVisitController.js";
 import {
-   createFollowUp,
-   getFollowUpsForVisit,
+  createFollowUp,
+  getFollowUpsForVisit,
 } from "../controller/followUpController.js";
 
 const router = express.Router();
@@ -20,12 +23,12 @@ const router = express.Router();
 // Multer fields map matching the UI's multi-stream uploader parameters
 // (onsite field photos + the five single KYC/document slots).
 const fieldVisitUploadFields = upload.fields([
-   { name: "images", maxCount: 10 },
-   { name: "businessCardFront", maxCount: 1 },
-   { name: "businessCardBack", maxCount: 1 },
-   { name: "gstCertificate", maxCount: 1 },
-   { name: "quotationDoc", maxCount: 1 },
-   { name: "brochureDoc", maxCount: 1 },
+  { name: "images", maxCount: 10 },
+  { name: "businessCardFront", maxCount: 1 },
+  { name: "businessCardBack", maxCount: 1 },
+  { name: "gstCertificate", maxCount: 1 },
+  { name: "quotationDoc", maxCount: 1 },
+  { name: "brochureDoc", maxCount: 1 },
 ]);
 
 /* ==========================================================
@@ -51,6 +54,12 @@ router.get("/:visitId/follow-ups", getFollowUpsForVisit);
 router.get("/dashboard/:userId", getDashboardSummary);
 router.get("/employee/:userId/today-followups", getTodayFollowUps);
 router.get("/employee/:userId", getMyFieldVisits);
+
+/* ----- Admin: cross-agent visibility (must stay above /:id) ----- */
+router.get("/admin/all", getAdminFieldVisits);
+router.get("/admin/agents", getFieldAgentsList);
+router.get("/admin/summary", getAdminFieldVisitSummary);
+
 router.get("/:id", getSingleFieldVisit);
 router.delete("/:id", deleteFieldVisit);
 

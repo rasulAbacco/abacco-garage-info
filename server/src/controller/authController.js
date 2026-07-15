@@ -2,13 +2,7 @@ import prisma from "../config/prisma.js";
 import bcrypt from "bcryptjs";
 export const registerUser = async (req, res) => {
   try {
-    const {
-      name,
-      email,
-      password,
-      role,
-      marketingType,
-    } = req.body;
+    const { name, email, password, role, marketingType } = req.body;
 
     const existingUser = await prisma.user.findUnique({
       where: {
@@ -60,7 +54,7 @@ export const registerUser = async (req, res) => {
 export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
-
+    console.log("DATABASE_URL:", process.env.DATABASE_URL);
     const user = await prisma.user.findUnique({
       where: {
         email,
@@ -79,10 +73,7 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    const isPasswordMatch = await bcrypt.compare(
-      password,
-      user.password
-    );
+    const isPasswordMatch = await bcrypt.compare(password, user.password);
 
     if (!isPasswordMatch) {
       return res.status(400).json({
@@ -135,20 +126,15 @@ export const getEmployees = async (req, res) => {
 };
 
 // TOGGLE USER STATUS
-export const toggleEmployeeStatus = async (
-  req,
-  res
-) => {
+export const toggleEmployeeStatus = async (req, res) => {
   try {
-
     const { id } = req.params;
 
-    const user =
-      await prisma.user.findUnique({
-        where: {
-          id,
-        },
-      });
+    const user = await prisma.user.findUnique({
+      where: {
+        id,
+      },
+    });
 
     if (!user) {
       return res.status(404).json({
@@ -156,27 +142,22 @@ export const toggleEmployeeStatus = async (
       });
     }
 
-    const updatedUser =
-      await prisma.user.update({
-        where: {
-          id,
-        },
+    const updatedUser = await prisma.user.update({
+      where: {
+        id,
+      },
 
-        data: {
-          isActive:
-            !user.isActive,
-        },
-      });
+      data: {
+        isActive: !user.isActive,
+      },
+    });
 
     res.status(200).json({
-      message:
-        "Status updated successfully",
+      message: "Status updated successfully",
 
       user: updatedUser,
     });
-
   } catch (error) {
-
     res.status(500).json({
       message: error.message,
     });

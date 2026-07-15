@@ -14,12 +14,16 @@ const ADMIN_LINKS = [
     label: "Attendance",
   },
   {
-  path: "/admin-dashboard/garage-visits",
-  label: "Garage Visits",
-},
+    path: "/admin-dashboard/garage-visits",
+    label: "Garage Visits",
+  },
   {
     path: "/admin-dashboard/schools",
     label: "School Visits",
+  },
+  {
+    path: "/admin-dashboard/field-agents",
+    label: "Field Agents",
   },
   {
     path: "/admin-dashboard/vehicles",

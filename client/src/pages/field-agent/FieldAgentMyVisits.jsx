@@ -1,10 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
-  Search, Filter, ChevronLeft, ChevronRight, Phone, MessageSquare,
-  MapPin, Calendar, User, Mail, Trash2, Eye, Edit3, X, Image as ImageIcon,
-  Building, BarChart3, AlertCircle, Plus, Layers, ArrowUpDown, CheckCircle2,
-  CalendarClock, Loader2
+  Search,
+  Filter,
+  ChevronLeft,
+  ChevronRight,
+  Phone,
+  MessageSquare,
+  MapPin,
+  Calendar,
+  User,
+  Mail,
+  Trash2,
+  Eye,
+  Edit3,
+  X,
+  Image as ImageIcon,
+  Building,
+  BarChart3,
+  AlertCircle,
+  Plus,
+  Layers,
+  ArrowUpDown,
+  CheckCircle2,
+  CalendarClock,
+  Loader2,
 } from "lucide-react";
 import API from "../../api/axios";
 import FollowUpModal from "./Followupmodal";
@@ -12,6 +32,7 @@ import Toast from "./Toast";
 
 const FieldAgentMyVisits = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const user = JSON.parse(localStorage.getItem("user")) || { id: "" };
 
   // Core Data States
@@ -31,9 +52,53 @@ const FieldAgentMyVisits = () => {
   const [followUpModalVisitId, setFollowUpModalVisitId] = useState(null);
   const [toast, setToast] = useState(null); // { message, type }
 
-  // Pagination State
-  const [currentPage, setCurrentPage] = useState(1);
-  const recordsPerPage = 10;
+  // Pagination State — driven by the URL (?page=&perPage=) instead of plain
+  // component state. This is what makes the browser's native Back button
+  // work correctly: opening a card (Inspect) pushes a new history entry,
+  // and pressing Back returns to this exact URL — page number and page
+  // size included — with no extra "remember the page" logic needed.
+  const PAGE_SIZE_OPTIONS = [10, 20, 50];
+
+  const currentPage = (() => {
+    const p = parseInt(searchParams.get("page"), 10);
+    return Number.isFinite(p) && p > 0 ? p : 1;
+  })();
+
+  const recordsPerPage = (() => {
+    const s = parseInt(searchParams.get("perPage"), 10);
+    return PAGE_SIZE_OPTIONS.includes(s) ? s : 10;
+  })();
+
+  // Updates only the page number in the URL. Uses `replace` so paging
+  // through the list (Next/Prev/page numbers) doesn't pile up dozens of
+  // history entries — only navigating away to a different route (Inspect,
+  // Revise, Add) pushes a real new entry that Back can return from.
+  const setCurrentPage = (page) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("page", String(page));
+        return next;
+      },
+      { replace: true },
+    );
+  };
+
+  // Handler for the "records per page" selector — changing page size should
+  // always snap back to page 1 so the slice stays in range.
+  const handleRecordsPerPageChange = (value) => {
+    const parsed = parseInt(value, 10);
+    const safeValue = PAGE_SIZE_OPTIONS.includes(parsed) ? parsed : 10;
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("perPage", String(safeValue));
+        next.set("page", "1");
+        return next;
+      },
+      { replace: true },
+    );
+  };
 
   // Modals & Interactive States
   const [activeImageGallery, setActiveImageGallery] = useState(null); // { images: [], index: 0 }
@@ -41,11 +106,20 @@ const FieldAgentMyVisits = () => {
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Debounce Search Term Logic
+  // IMPORTANT: this effect runs on every mount (searchTerm starts at "" and
+  // the effect always fires once initially), so it must only reset the
+  // page when the debounced value actually changes as a result of the
+  // agent typing — otherwise it silently resets ?page=8 back to page 1
+  // ~300ms after every remount (e.g. right after using the Back button).
   useEffect(() => {
     const handler = setTimeout(() => {
-      setDebouncedSearch(searchTerm);
-      setCurrentPage(1); // Reset page on query refinement
-    }, 300000 / 1000); // 300ms Debounce Execution Window
+      setDebouncedSearch((prevDebounced) => {
+        if (prevDebounced !== searchTerm) {
+          setCurrentPage(1); // Reset page only on a real query refinement
+        }
+        return searchTerm;
+      });
+    }, 300); // 300ms Debounce Execution Window
 
     return () => clearTimeout(handler);
   }, [searchTerm]);
@@ -62,7 +136,11 @@ const FieldAgentMyVisits = () => {
         setLoading(true);
         const response = await API.get(`/api/field-visit/employee/${user.id}`);
         // Ensure structure parses as an iterable array payload
-        setVisits(Array.isArray(response.data) ? response.data : response.data?.visits || []);
+        setVisits(
+          Array.isArray(response.data)
+            ? response.data
+            : response.data?.visits || [],
+        );
         setError(null);
       } catch (err) {
         console.error("Pipeline compilation data access exception: ", err);
@@ -81,12 +159,17 @@ const FieldAgentMyVisits = () => {
     try {
       setIsDeleting(true);
       await API.delete(`/api/field-visit/${deleteConfirmationId}`);
-      setVisits(prev => prev.filter(v => v.id !== deleteConfirmationId));
-      alert("Lead verification visit record purged from dashboard telemetry map.");
+      setVisits((prev) => prev.filter((v) => v.id !== deleteConfirmationId));
+      alert(
+        "Lead verification visit record purged from dashboard telemetry map.",
+      );
       setDeleteConfirmationId(null);
     } catch (err) {
       console.error("Lead termination processing block trace failure: ", err);
-      alert(err.response?.data?.message || "Execution exception triggered during structural resource depletion.");
+      alert(
+        err.response?.data?.message ||
+          "Execution exception triggered during structural resource depletion.",
+      );
     } finally {
       setIsDeleting(false);
     }
@@ -94,22 +177,33 @@ const FieldAgentMyVisits = () => {
 
   // Derived Telemetry State Processing Loop (useMemo performance guard)
   const statistics = useMemo(() => {
-    const stats = { total: 0, today: 0, pending: 0, interested: 0, customer: 0 };
+    const stats = {
+      total: 0,
+      today: 0,
+      pending: 0,
+      interested: 0,
+      customer: 0,
+    };
     const todayStr = new Date().toISOString().split("T")[0];
 
-    visits.forEach(v => {
+    visits.forEach((v) => {
       stats.total++;
 
       // Strict layout matching configuration parsing for validation timestamps
       if (v.createdAt) {
-        const createdDateStr = new Date(v.createdAt).toISOString().split("T")[0];
+        const createdDateStr = new Date(v.createdAt)
+          .toISOString()
+          .split("T")[0];
         if (createdDateStr === todayStr) stats.today++;
       }
 
       const statusKey = v.status?.toUpperCase();
       if (statusKey === "PENDING") stats.pending++;
       else if (statusKey === "INTERESTED") stats.interested++;
-      else if (statusKey === "CUSTOMER") stats.customer++;
+      // FieldVisitStatus has both CUSTOMER and CLOSED as terminal/won
+      // states (see schema.prisma) — both should count toward "Closed".
+      else if (statusKey === "CUSTOMER" || statusKey === "CLOSED")
+        stats.customer++;
     });
 
     return stats;
@@ -119,7 +213,8 @@ const FieldAgentMyVisits = () => {
   const getFollowUpBucket = (visit) => {
     const nextDate = visit.nextFollowUpDate || visit.followUpDate;
     const status = visit.latestFollowUpStatus;
-    if (status === "Customer" || status === "Not Interested") return "COMPLETED";
+    if (status === "Customer" || status === "Not Interested")
+      return "COMPLETED";
     if (!nextDate) return null;
 
     const today = new Date();
@@ -143,29 +238,32 @@ const FieldAgentMyVisits = () => {
     // Query Strategy Search Alignment Mapping Rules
     if (debouncedSearch.trim()) {
       const target = debouncedSearch.toLowerCase().trim();
-      output = output.filter(v =>
-        v.title?.toLowerCase().includes(target) ||
-        v.contactPerson?.toLowerCase().includes(target) ||
-        v.phoneNumber?.toLowerCase().includes(target) ||
-        v.city?.toLowerCase().includes(target) ||
-        v.state?.toLowerCase().includes(target) ||
-        v.marketingType?.toLowerCase().includes(target) ||
-        v.latestFollowUpRemark?.toLowerCase().includes(target)
+      output = output.filter(
+        (v) =>
+          v.title?.toLowerCase().includes(target) ||
+          v.contactPerson?.toLowerCase().includes(target) ||
+          v.phoneNumber?.toLowerCase().includes(target) ||
+          v.city?.toLowerCase().includes(target) ||
+          v.state?.toLowerCase().includes(target) ||
+          v.marketingType?.toLowerCase().includes(target) ||
+          v.latestFollowUpRemark?.toLowerCase().includes(target),
       );
     }
 
     // Dropdown Filtering Logic Check Blocks
     if (statusFilter !== "ALL") {
-      output = output.filter(v => v.status?.toUpperCase() === statusFilter);
+      output = output.filter((v) => v.status?.toUpperCase() === statusFilter);
     }
 
     if (marketingFilter !== "ALL") {
-      output = output.filter(v => v.marketingType?.toUpperCase() === marketingFilter);
+      output = output.filter(
+        (v) => v.marketingType?.toUpperCase() === marketingFilter,
+      );
     }
 
     // Follow-up date bucket filter (Today / Tomorrow / Overdue / This Week / Completed)
     if (followUpFilter !== "ALL") {
-      output = output.filter(v => getFollowUpBucket(v) === followUpFilter);
+      output = output.filter((v) => getFollowUpBucket(v) === followUpFilter);
     }
 
     // Evaluation Metric Sorting Routines Execution Layer
@@ -204,21 +302,33 @@ const FieldAgentMyVisits = () => {
     });
 
     return output;
-  }, [visits, debouncedSearch, statusFilter, marketingFilter, sortBy, followUpFilter]);
+  }, [
+    visits,
+    debouncedSearch,
+    statusFilter,
+    marketingFilter,
+    sortBy,
+    followUpFilter,
+  ]);
 
   // Structured Pagination Slicing Allocation Window
   const totalPages = Math.ceil(processedVisits.length / recordsPerPage) || 1;
   const paginatedVisits = useMemo(() => {
     const startIdx = (currentPage - 1) * recordsPerPage;
     return processedVisits.slice(startIdx, startIdx + recordsPerPage);
-  }, [processedVisits, currentPage]);
+  }, [processedVisits, currentPage, recordsPerPage]);
 
-  // Sync index boundaries safely during mutation processing arrays loops
+  // Sync index boundaries safely during mutation processing arrays loops.
+  // IMPORTANT: skip this while the initial fetch is still in flight — while
+  // `visits` is still [], totalPages defaults to 1, which would otherwise
+  // immediately clamp a restored page (e.g. page 12 from the URL) down to 1
+  // before the real data has even arrived.
   useEffect(() => {
+    if (loading) return;
     if (currentPage > totalPages) {
       setCurrentPage(totalPages);
     }
-  }, [totalPages, currentPage]);
+  }, [totalPages, currentPage, loading]);
 
   // Utility Date Formatter (Intl Namespace API specifications layout mapping)
   const formatDateString = (rawDate) => {
@@ -227,7 +337,7 @@ const FieldAgentMyVisits = () => {
       return new Intl.DateTimeFormat("en-GB", {
         day: "numeric",
         month: "short",
-        year: "numeric"
+        year: "numeric",
       }).format(new Date(rawDate));
     } catch (e) {
       return "Invalid Date";
@@ -239,8 +349,12 @@ const FieldAgentMyVisits = () => {
     const s = rawStatus?.toUpperCase() || "";
     if (s === "PENDING") return "bg-amber-50 text-amber-700 border-amber-200";
     if (s === "INTERESTED") return "bg-blue-50 text-blue-700 border-blue-200";
-    if (s === "CUSTOMER") return "bg-emerald-50 text-emerald-700 border-emerald-200";
-    if (s === "NOT_INTERESTED") return "bg-rose-50 text-rose-700 border-rose-200";
+    if (s === "CUSTOMER")
+      return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    if (s === "CLOSED")
+      return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    if (s === "NOT_INTERESTED")
+      return "bg-rose-50 text-rose-700 border-rose-200";
     return "bg-slate-50 text-slate-700 border-slate-200";
   };
 
@@ -274,7 +388,6 @@ const FieldAgentMyVisits = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans antialiased text-slate-900 selection:bg-slate-950 selection:text-white">
-
       {/* PAGE RUNTIME STICKY CONTROL HEADER PANEL */}
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur-md px-4 py-4 sm:px-6 md:px-8 shadow-xs">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -297,18 +410,20 @@ const FieldAgentMyVisits = () => {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-6 sm:px-6 md:px-8 pb-32 space-y-6">
-
         {/* METADATA PIPELINE STATISTICAL OVERLAY BLOCK MATRIX (Sticky Top Optional Layer) */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
-
           {/* TOTAL CARD */}
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex items-center gap-3">
             <div className="p-2.5 rounded-lg bg-slate-100 text-slate-700 shrink-0">
               <Layers className="w-5 h-5" />
             </div>
             <div>
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Pipeline</span>
-              <span className="text-xl font-bold text-slate-900">{statistics.total}</span>
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Total Pipeline
+              </span>
+              <span className="text-xl font-bold text-slate-900">
+                {statistics.total}
+              </span>
             </div>
           </div>
 
@@ -318,8 +433,12 @@ const FieldAgentMyVisits = () => {
               <Calendar className="w-5 h-5" />
             </div>
             <div>
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Captured Today</span>
-              <span className="text-xl font-bold text-slate-900">{statistics.today}</span>
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Captured Today
+              </span>
+              <span className="text-xl font-bold text-slate-900">
+                {statistics.today}
+              </span>
             </div>
           </div>
 
@@ -329,8 +448,12 @@ const FieldAgentMyVisits = () => {
               <BarChart3 className="w-5 h-5" />
             </div>
             <div>
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Pending Leads</span>
-              <span className="text-xl font-bold text-slate-900">{statistics.pending}</span>
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Pending Leads
+              </span>
+              <span className="text-xl font-bold text-slate-900">
+                {statistics.pending}
+              </span>
             </div>
           </div>
 
@@ -340,8 +463,12 @@ const FieldAgentMyVisits = () => {
               <BarChart3 className="w-5 h-5" />
             </div>
             <div>
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Interested Matrix</span>
-              <span className="text-xl font-bold text-slate-900">{statistics.interested}</span>
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Interested Matrix
+              </span>
+              <span className="text-xl font-bold text-slate-900">
+                {statistics.interested}
+              </span>
             </div>
           </div>
 
@@ -351,8 +478,12 @@ const FieldAgentMyVisits = () => {
               <CheckCircle2 className="w-5 h-5" />
             </div>
             <div>
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Closed Accounts</span>
-              <span className="text-xl font-bold text-emerald-600">{statistics.customer}</span>
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Closed Accounts
+              </span>
+              <span className="text-xl font-bold text-emerald-600">
+                {statistics.customer}
+              </span>
             </div>
           </div>
         </div>
@@ -360,7 +491,6 @@ const FieldAgentMyVisits = () => {
         {/* STICKY LEAD CONVERSION TRIAGE ROUTING CONTROL MATRIX SEARCH FILTER BAR */}
         <div className="bg-white border border-slate-200 shadow-xs rounded-xl p-4 sticky top-[81px] z-20 space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-
             {/* ONSITE PATTERN SEARCH ENGINE INPUT */}
             <div className="md:col-span-5 relative">
               <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
@@ -382,7 +512,10 @@ const FieldAgentMyVisits = () => {
               </span>
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="w-full pl-8 pr-2 py-2 text-xs font-semibold border border-slate-300 rounded-lg bg-white text-slate-700 outline-none focus:border-slate-900"
               >
                 <option value="ALL">All Status Pipeline</option>
@@ -390,6 +523,7 @@ const FieldAgentMyVisits = () => {
                 <option value="FOLLOW_UP">FOLLOW UP</option>
                 <option value="INTERESTED">INTERESTED</option>
                 <option value="CUSTOMER">CUSTOMER</option>
+                <option value="CLOSED">CLOSED</option>
                 <option value="NOT_INTERESTED">NOT INTERESTED</option>
               </select>
             </div>
@@ -401,7 +535,10 @@ const FieldAgentMyVisits = () => {
               </span>
               <select
                 value={marketingFilter}
-                onChange={(e) => setMarketingFilter(e.target.value)}
+                onChange={(e) => {
+                  setMarketingFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="w-full pl-8 pr-2 py-2 text-xs font-semibold border border-slate-300 rounded-lg bg-white text-slate-700 outline-none focus:border-slate-900"
               >
                 <option value="ALL">All Marketing Focus</option>
@@ -421,7 +558,10 @@ const FieldAgentMyVisits = () => {
               </span>
               <select
                 value={followUpFilter}
-                onChange={(e) => setFollowUpFilter(e.target.value)}
+                onChange={(e) => {
+                  setFollowUpFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="w-full pl-8 pr-2 py-2 text-xs font-semibold border border-slate-300 rounded-lg bg-white text-slate-700 outline-none focus:border-slate-900"
               >
                 <option value="ALL">All Follow-ups</option>
@@ -445,21 +585,58 @@ const FieldAgentMyVisits = () => {
               >
                 <option value="NEWEST">Sorting: Newest Records</option>
                 <option value="OLDEST">Sorting: Oldest Records</option>
-                <option value="FOLLOWUP_NEAREST">Sorting: Nearest Follow-up</option>
-                <option value="FOLLOWUP_OLDEST">Sorting: Oldest Follow-up</option>
-                <option value="FOLLOWUP_NEWEST">Sorting: Newest Follow-up</option>
+                <option value="FOLLOWUP_NEAREST">
+                  Sorting: Nearest Follow-up
+                </option>
+                <option value="FOLLOWUP_OLDEST">
+                  Sorting: Oldest Follow-up
+                </option>
+                <option value="FOLLOWUP_NEWEST">
+                  Sorting: Newest Follow-up
+                </option>
                 <option value="TITLE">Sorting: Alpha Business Title</option>
               </select>
             </div>
 
+            {/* CARDS-PER-PAGE SELECTOR: lets the agent choose how many cards render per page */}
+            <div className="md:col-span-2 relative flex items-center">
+              <span className="absolute left-3 text-slate-400 pointer-events-none">
+                <Layers className="w-3.5 h-3.5" />
+              </span>
+              <select
+                value={recordsPerPage}
+                onChange={(e) => handleRecordsPerPageChange(e.target.value)}
+                className="w-full pl-8 pr-2 py-2 text-xs font-semibold border border-slate-300 rounded-lg bg-white text-slate-700 outline-none focus:border-slate-900"
+                title="Cards per page"
+              >
+                {PAGE_SIZE_OPTIONS.map((n) => (
+                  <option key={n} value={n}>
+                    {n} / page
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* ACTIVE FILTER DISPATCH META BANNER SUMMARY */}
-          {(statusFilter !== "ALL" || marketingFilter !== "ALL" || followUpFilter !== "ALL" || debouncedSearch.trim() !== "") && (
+          {(statusFilter !== "ALL" ||
+            marketingFilter !== "ALL" ||
+            followUpFilter !== "ALL" ||
+            debouncedSearch.trim() !== "") && (
             <div className="flex items-center justify-between text-[11px] font-bold bg-slate-50 px-3 py-1.5 rounded-lg text-slate-500 uppercase tracking-wider border border-slate-100">
-              <span>Matching Pipeline Array Vector Size Metrics: {processedVisits.length} leads tracked</span>
+              <span>
+                Matching Pipeline Array Vector Size Metrics:{" "}
+                {processedVisits.length} leads tracked
+              </span>
               <button
-                onClick={() => { setSearchTerm(""); setStatusFilter("ALL"); setMarketingFilter("ALL"); setSortBy("NEWEST"); setFollowUpFilter("ALL"); }}
+                onClick={() => {
+                  setSearchTerm("");
+                  setStatusFilter("ALL");
+                  setMarketingFilter("ALL");
+                  setSortBy("NEWEST");
+                  setFollowUpFilter("ALL");
+                  setCurrentPage(1);
+                }}
                 className="text-slate-900 hover:underline cursor-pointer"
               >
                 Clear Operational Filter Parameters
@@ -472,8 +649,11 @@ const FieldAgentMyVisits = () => {
         {loading ? (
           /* PIPELINE RENDERING SKELETON PLACEHOLDER LOADING MATRICES */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-pulse">
-            {[1, 2, 3, 4, 5, 6].map(skeletonIdx => (
-              <div key={skeletonIdx} className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+            {[1, 2, 3, 4, 5, 6].map((skeletonIdx) => (
+              <div
+                key={skeletonIdx}
+                className="bg-white border border-slate-200 rounded-xl p-5 space-y-4"
+              >
                 <div className="flex justify-between items-start">
                   <div className="w-1/2 h-4 bg-slate-200 rounded" />
                   <div className="w-1/4 h-5 bg-slate-200 rounded-full" />
@@ -497,8 +677,12 @@ const FieldAgentMyVisits = () => {
           <div className="bg-rose-50 border border-rose-200 text-rose-800 p-6 rounded-xl flex items-start gap-3.5 shadow-xs">
             <AlertCircle className="w-5 h-5 mt-0.5 shrink-0" />
             <div>
-              <h3 className="font-bold text-sm">System Telemetry Exception Occurred</h3>
-              <p className="text-xs mt-1 text-rose-700/90 leading-relaxed">{error}</p>
+              <h3 className="font-bold text-sm">
+                System Telemetry Exception Occurred
+              </h3>
+              <p className="text-xs mt-1 text-rose-700/90 leading-relaxed">
+                {error}
+              </p>
             </div>
           </div>
         ) : paginatedVisits.length === 0 ? (
@@ -508,9 +692,12 @@ const FieldAgentMyVisits = () => {
               <Building className="w-8 h-8" />
             </div>
             <div className="space-y-1">
-              <h3 className="text-lg font-bold text-slate-900">No Visits Found</h3>
+              <h3 className="text-lg font-bold text-slate-900">
+                No Visits Found
+              </h3>
               <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
-                Start adding your first marketing visit. No mapped business data structures fit the requested filter allocation queries.
+                Start adding your first marketing visit. No mapped business data
+                structures fit the requested filter allocation queries.
               </p>
             </div>
             <button
@@ -526,13 +713,21 @@ const FieldAgentMyVisits = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {paginatedVisits.map((visit) => {
                 const mainImage = visit.images?.[0]?.imageUrl || null;
+                // Prefer the latest follow-up remark; if this visit has no
+                // follow-up entries yet, fall back to the notes captured on
+                // the original visit itself (visit.notes / discussionSummary)
+                // so the card never shows "No review" when there's actually
+                // content recorded — only when there's truly nothing.
+                const reviewText =
+                  visit.latestFollowUpRemark || visit.notes || null;
+                const reviewIsFallbackNote =
+                  !visit.latestFollowUpRemark && !!visit.notes;
 
                 return (
                   <div
                     key={visit.id}
                     className={`bg-white rounded-xl border-2 shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col overflow-hidden group ${getCardBorderClass(visit)}`}
                   >
-
                     {/* VISUAL ASSET COVER IMAGE WRAPPER LAYER (Hover Zoom Functionality Embedded) */}
                     <div className="relative h-44 w-full bg-slate-100 border-b border-slate-100 overflow-hidden shrink-0">
                       {mainImage ? (
@@ -540,22 +735,33 @@ const FieldAgentMyVisits = () => {
                           src={mainImage}
                           alt={`${visit.title} layout context location metadata file`}
                           loading="lazy"
-                          onClick={() => setActiveImageGallery({ images: visit.images, index: 0 })}
+                          onClick={() =>
+                            setActiveImageGallery({
+                              images: visit.images,
+                              index: 0,
+                            })
+                          }
                           className="w-full h-full object-cover transform duration-300 group-hover:scale-105 cursor-pointer"
                         />
                       ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center text-slate-300 gap-1.5 select-none">
                           <ImageIcon className="w-8 h-8 stroke-1" />
-                          <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400">Media Vault Empty</span>
+                          <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400">
+                            Media Vault Empty
+                          </span>
                         </div>
                       )}
 
                       {/* STRUCT BADGES BOUND ON ABSOLUTE IMAGE PLANES */}
                       <div className="absolute top-3 left-3 flex flex-col gap-1.5 items-start">
-                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded shadow-xs ${getMarketingBadgeStyle(visit.marketingType)}`}>
+                        <span
+                          className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded shadow-xs ${getMarketingBadgeStyle(visit.marketingType)}`}
+                        >
                           {visit.marketingType || "GENERAL"}
                         </span>
-                        <span className={`text-[9px] font-bold uppercase tracking-widest border px-2 py-0.5 rounded shadow-xs bg-white ${getStatusBadgeStyle(visit.status)}`}>
+                        <span
+                          className={`text-[9px] font-bold uppercase tracking-widest border px-2 py-0.5 rounded shadow-xs bg-white ${getStatusBadgeStyle(visit.status)}`}
+                        >
                           {visit.status || "PENDING"}
                         </span>
                       </div>
@@ -563,7 +769,6 @@ const FieldAgentMyVisits = () => {
 
                     {/* CORE BUSINESS METRIC DETAILS CELL */}
                     <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-
                       <div className="space-y-3">
                         {/* Core Enterprise Header */}
                         <div>
@@ -571,7 +776,8 @@ const FieldAgentMyVisits = () => {
                             {visit.title || "Unnamed Lead Enterprise"}
                           </h3>
                           <span className="text-[10px] font-medium text-slate-400 block mt-0.5 flex items-center gap-1">
-                            <Calendar className="w-3 h-3" /> Recorded: {formatDateString(visit.createdAt)}
+                            <Calendar className="w-3 h-3" /> Recorded:{" "}
+                            {formatDateString(visit.createdAt)}
                           </span>
                         </div>
 
@@ -579,25 +785,38 @@ const FieldAgentMyVisits = () => {
                         <div className="space-y-1.5 text-xs text-slate-600">
                           <div className="flex items-center gap-2">
                             <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <span className="truncate font-medium">{visit.contactPerson || "No Name Index Specified"}</span>
+                            <span className="truncate font-medium">
+                              {visit.contactPerson || "No Name Index Specified"}
+                            </span>
                           </div>
 
                           <div className="flex items-center gap-2">
                             <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <span className="truncate tabular-nums font-medium">{visit.phoneNumber || "No Target Contacts Linked"}</span>
+                            <span className="truncate tabular-nums font-medium">
+                              {visit.phoneNumber || "No Target Contacts Linked"}
+                            </span>
                           </div>
 
                           {visit.email && (
                             <div className="flex items-center gap-2">
                               <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                              <span className="truncate text-slate-500">{visit.email}</span>
+                              <span className="truncate text-slate-500">
+                                {visit.email}
+                              </span>
                             </div>
                           )}
 
                           <div className="flex items-start gap-2 pt-0.5">
                             <MapPin className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" />
                             <span className="line-clamp-2 text-[11px] leading-relaxed text-slate-500">
-                              {[visit.address, visit.city, visit.district, visit.state].filter(Boolean).join(", ")}
+                              {[
+                                visit.address,
+                                visit.city,
+                                visit.district,
+                                visit.state,
+                              ]
+                                .filter(Boolean)
+                                .join(", ")}
                             </span>
                           </div>
                         </div>
@@ -606,21 +825,52 @@ const FieldAgentMyVisits = () => {
                         <div className="bg-slate-50 border border-slate-200/60 rounded-lg p-2.5 space-y-1.5 text-xs">
                           <div className="flex items-center justify-between">
                             <span className="font-bold text-slate-400 uppercase tracking-wider text-[9px] flex items-center gap-1">
-                              <Calendar className="w-3 h-3 text-slate-400" /> Next Follow-up:
+                              <Calendar className="w-3 h-3 text-slate-400" />{" "}
+                              Next Follow-up:
                             </span>
                             <span className="font-semibold text-slate-800 bg-white border border-slate-200 rounded px-2 py-0.5 text-[11px]">
-                              {formatDateString(visit.nextFollowUpDate || visit.followUpDate)}
+                              {formatDateString(
+                                visit.nextFollowUpDate || visit.followUpDate,
+                              )}
                             </span>
                           </div>
-                          {visit.latestFollowUpRemark && (
+
+                          {/* Latest Review: the most recent follow-up's outcome + remark.
+                              Falls back to the visit's own notes when no follow-up exists
+                              yet. Always rendered (with a final fallback) so it's never
+                              silently missing from the card. */}
+                          <div className="pt-1 border-t border-slate-200/70 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-slate-400 uppercase tracking-wider text-[9px]">
+                                {reviewIsFallbackNote
+                                  ? "Visit Notes"
+                                  : "Latest Review"}
+                              </span>
+                              {visit.latestFollowUpStatus && (
+                                <span
+                                  className={`px-2 py-0.5 rounded-md text-[9px] border font-bold uppercase tracking-wider bg-white ${getStatusBadgeStyle(visit.latestFollowUpStatus?.replace(" ", "_"))}`}
+                                >
+                                  {visit.latestFollowUpStatus}
+                                </span>
+                              )}
+                            </div>
                             <p className="text-[11px] text-slate-500 italic line-clamp-2 leading-relaxed">
-                              "{visit.latestFollowUpRemark}"
+                              {reviewText
+                                ? `"${reviewText}"`
+                                : "No review logged yet — add a follow-up to record one."}
                             </p>
-                          )}
+                          </div>
+
                           <div className="flex items-center justify-between pt-1 border-t border-slate-200/70">
-                            <span className="font-bold text-slate-400 uppercase tracking-wider text-[9px]">Priority</span>
-                            <span className={`px-2 py-0.5 rounded-md text-[10px] border font-bold ${getPriorityBadgeStyle(visit.latestFollowUpPriority || visit.priority)}`}>
-                              {visit.latestFollowUpPriority || visit.priority || "Medium"}
+                            <span className="font-bold text-slate-400 uppercase tracking-wider text-[9px]">
+                              Priority
+                            </span>
+                            <span
+                              className={`px-2 py-0.5 rounded-md text-[10px] border font-bold ${getPriorityBadgeStyle(visit.latestFollowUpPriority || visit.priority)}`}
+                            >
+                              {visit.latestFollowUpPriority ||
+                                visit.priority ||
+                                "Medium"}
                             </span>
                           </div>
                         </div>
@@ -628,7 +878,6 @@ const FieldAgentMyVisits = () => {
 
                       {/* INTEGRATED COMMUNICATION & LOGISTICS TRIGGER CONSOLE GRID */}
                       <div className="pt-3 border-t border-slate-100 flex flex-col gap-2.5">
-
                         {/* Communication Matrix Routing Handles */}
                         <div className="grid grid-cols-3 gap-2">
                           <a
@@ -648,7 +897,11 @@ const FieldAgentMyVisits = () => {
                             <MessageSquare className="w-3.5 h-3.5" /> WhatsApp
                           </a>
                           <a
-                            href={visit.latitude && visit.longitude ? `https://maps.google.com/?q=${visit.latitude},${visit.longitude}` : "https://www.google.com/maps?q=latitude,longitude"}
+                            href={
+                              visit.latitude && visit.longitude
+                                ? `https://maps.google.com/?q=${visit.latitude},${visit.longitude}`
+                                : "https://www.google.com/maps?q=latitude,longitude"
+                            }
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center justify-center gap-1.5 text-center bg-indigo-50 hover:bg-indigo-100 text-indigo-700 py-1.5 rounded-lg text-xs font-bold transition-all"
@@ -661,13 +914,21 @@ const FieldAgentMyVisits = () => {
                         {/* Structural Dashboard Modification Administrative Triggers */}
                         <div className="grid grid-cols-3 gap-2 pt-0.5">
                           <button
-                            onClick={() => navigate(`/field-agent-dashboard/visit/${visit.id}`)}
+                            onClick={() =>
+                              navigate(
+                                `/field-agent-dashboard/visit/${visit.id}`,
+                              )
+                            }
                             className="inline-flex items-center justify-center gap-1 bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-400 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer"
                           >
                             <Eye className="w-3 h-3" /> Inspect
                           </button>
                           <button
-                            onClick={() => navigate(`/field-agent-dashboard/edit-visit/${visit.id}`)}
+                            onClick={() =>
+                              navigate(
+                                `/field-agent-dashboard/edit-visit/${visit.id}`,
+                              )
+                            }
                             className="inline-flex items-center justify-center gap-1 bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-400 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer"
                           >
                             <Edit3 className="w-3 h-3" /> Revise
@@ -687,9 +948,7 @@ const FieldAgentMyVisits = () => {
                         >
                           <Plus className="w-3.5 h-3.5" /> Add Follow-up
                         </button>
-
                       </div>
-
                     </div>
                   </div>
                 );
@@ -700,15 +959,28 @@ const FieldAgentMyVisits = () => {
             {totalPages > 1 && (
               <div className="flex flex-col sm:flex-row items-center justify-between border-t border-slate-200/80 pt-6 gap-4">
                 <span className="text-xs text-slate-500 font-medium">
-                  Showing Row Blocks <span className="font-bold text-slate-900">{(currentPage - 1) * recordsPerPage + 1}</span> to{" "}
-                  <span className="font-bold text-slate-900">{Math.min(currentPage * recordsPerPage, processedVisits.length)}</span> of{" "}
-                  <span className="font-bold text-slate-900">{processedVisits.length}</span> Tracked Matrix Entities
+                  Showing Row Blocks{" "}
+                  <span className="font-bold text-slate-900">
+                    {(currentPage - 1) * recordsPerPage + 1}
+                  </span>{" "}
+                  to{" "}
+                  <span className="font-bold text-slate-900">
+                    {Math.min(
+                      currentPage * recordsPerPage,
+                      processedVisits.length,
+                    )}
+                  </span>{" "}
+                  of{" "}
+                  <span className="font-bold text-slate-900">
+                    {processedVisits.length}
+                  </span>{" "}
+                  Tracked Matrix Entities
                 </span>
 
                 <div className="flex items-center gap-1">
                   {/* Prev Button */}
                   <button
-                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
                     disabled={currentPage === 1}
                     className="p-2 border border-slate-300 rounded-lg bg-white text-slate-700 hover:bg-slate-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                   >
@@ -722,10 +994,11 @@ const FieldAgentMyVisits = () => {
                       <button
                         key={pageNumber}
                         onClick={() => setCurrentPage(pageNumber)}
-                        className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer border ${currentPage === pageNumber
-                          ? "bg-slate-950 text-white border-slate-950 shadow-xs"
-                          : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
-                          }`}
+                        className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer border ${
+                          currentPage === pageNumber
+                            ? "bg-slate-950 text-white border-slate-950 shadow-xs"
+                            : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                        }`}
                       >
                         {pageNumber}
                       </button>
@@ -734,7 +1007,9 @@ const FieldAgentMyVisits = () => {
 
                   {/* Next Button */}
                   <button
-                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    onClick={() =>
+                      setCurrentPage(Math.min(currentPage + 1, totalPages))
+                    }
                     disabled={currentPage === totalPages}
                     className="p-2 border border-slate-300 rounded-lg bg-white text-slate-700 hover:bg-slate-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                   >
@@ -761,7 +1036,12 @@ const FieldAgentMyVisits = () => {
           <div className="max-w-4xl w-full flex items-center justify-between gap-4">
             {/* Prev Channel Control Button */}
             <button
-              onClick={() => setActiveImageGallery(prev => ({ ...prev, index: Math.max(prev.index - 1, 0) }))}
+              onClick={() =>
+                setActiveImageGallery((prev) => ({
+                  ...prev,
+                  index: Math.max(prev.index - 1, 0),
+                }))
+              }
               disabled={activeImageGallery.index === 0}
               className="p-3 border border-white/10 rounded-full bg-white/5 text-white hover:bg-white/10 transition-all disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer shrink-0"
             >
@@ -771,19 +1051,31 @@ const FieldAgentMyVisits = () => {
             {/* Central Media Canvas Viewport */}
             <div className="flex-1 flex flex-col items-center justify-center space-y-2">
               <img
-                src={activeImageGallery.images[activeImageGallery.index]?.imageUrl}
+                src={
+                  activeImageGallery.images[activeImageGallery.index]?.imageUrl
+                }
                 alt={`Expanded analytical asset structural photo matrix sequence index view ${activeImageGallery.index + 1}`}
                 className="max-h-[75vh] max-w-full object-contain rounded-lg shadow-2xl border border-white/5"
               />
               <span className="text-white/60 text-xs font-mono tracking-widest bg-black/40 px-3 py-1 rounded-full">
-                Sequence Matrix Index File Context Index Tracker Pool: {activeImageGallery.index + 1} / {activeImageGallery.images.length}
+                Sequence Matrix Index File Context Index Tracker Pool:{" "}
+                {activeImageGallery.index + 1} /{" "}
+                {activeImageGallery.images.length}
               </span>
             </div>
 
             {/* Next Channel Control Button */}
             <button
-              onClick={() => setActiveImageGallery(prev => ({ ...prev, index: Math.min(prev.index + 1, prev.images.length - 1) }))}
-              disabled={activeImageGallery.index === activeImageGallery.images.length - 1}
+              onClick={() =>
+                setActiveImageGallery((prev) => ({
+                  ...prev,
+                  index: Math.min(prev.index + 1, prev.images.length - 1),
+                }))
+              }
+              disabled={
+                activeImageGallery.index ===
+                activeImageGallery.images.length - 1
+              }
               className="p-3 border border-white/10 rounded-full bg-white/5 text-white hover:bg-white/10 transition-all disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer shrink-0"
             >
               <ChevronRight className="w-6 h-6" />
@@ -801,9 +1093,13 @@ const FieldAgentMyVisits = () => {
             </div>
 
             <div className="space-y-1">
-              <h3 className="text-base font-bold text-slate-900">Are you sure?</h3>
+              <h3 className="text-base font-bold text-slate-900">
+                Are you sure?
+              </h3>
               <p className="text-xs text-slate-400 leading-relaxed">
-                This process initiates absolute framework data erasure. Spatially linked metadata variables, customer contact records, and tracking telemetry files will be permanently purged.
+                This process initiates absolute framework data erasure.
+                Spatially linked metadata variables, customer contact records,
+                and tracking telemetry files will be permanently purged.
               </p>
             </div>
 
@@ -839,28 +1135,51 @@ const FieldAgentMyVisits = () => {
         <FollowUpModal
           visitId={followUpModalVisitId}
           onClose={() => setFollowUpModalVisitId(null)}
-          onSaved={(followUps) => {
+          onSaved={(followUps, savedFollowUp) => {
             // Refresh just this visit card in place (no page reload).
-            setVisits(prev => prev.map(v => {
-              if (v.id !== followUpModalVisitId) return v;
-              const latest = followUps[0] || null;
-              return {
-                ...v,
-                followUps,
-                nextFollowUpDate: latest?.followUpDate || v.nextFollowUpDate,
-                followUpDate: latest?.followUpDate || v.followUpDate,
-                latestFollowUpRemark: latest?.remark || v.latestFollowUpRemark,
-                latestFollowUpStatus: latest?.status || v.latestFollowUpStatus,
-                latestFollowUpPriority: latest?.priority || v.latestFollowUpPriority,
-              };
-            }));
+            setVisits((prev) =>
+              prev.map((v) => {
+                if (v.id !== followUpModalVisitId) return v;
+                const latest = savedFollowUp || followUps[0] || null;
+                // Mirrors the backend's own status transition (see
+                // followUpController.createFollowUp): only these three
+                // follow-up statuses promote the visit's overall status —
+                // "Pending"/"Follow Up" leave the existing status untouched.
+                const VISIT_STATUS_MAP = {
+                  Interested: "INTERESTED",
+                  Customer: "CUSTOMER",
+                  "Not Interested": "NOT_INTERESTED",
+                };
+                const nextStatus =
+                  (latest?.status && VISIT_STATUS_MAP[latest.status]) ||
+                  v.status;
+                return {
+                  ...v,
+                  followUps,
+                  status: nextStatus,
+                  nextFollowUpDate: latest?.followUpDate || v.nextFollowUpDate,
+                  followUpDate: latest?.followUpDate || v.followUpDate,
+                  latestFollowUpRemark:
+                    latest?.remark || v.latestFollowUpRemark,
+                  latestFollowUpStatus:
+                    latest?.status || v.latestFollowUpStatus,
+                  latestFollowUpPriority:
+                    latest?.priority || v.latestFollowUpPriority,
+                };
+              }),
+            );
           }}
           onToast={(message, type) => setToast({ message, type })}
         />
       )}
 
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 };
